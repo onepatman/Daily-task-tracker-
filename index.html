@@ -42,64 +42,70 @@
     </div>
   </header>
 
-  <button class="notify-pill" id="notifyPill" hidden>🔔 Enable reminder notifications</button>
+  <div class="app-body">
+    <aside class="app-sidebar">
+      <button class="notify-pill" id="notifyPill" hidden>🔔 Enable reminder notifications</button>
 
-  <section class="calendar" id="calendarSection">
-    <div class="calendar-weekdays">
-      <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
-    </div>
-    <div class="calendar-grid" id="calendarGrid"></div>
-  </section>
-  <button class="calendar-toggle" id="calendarToggle">Hide calendar ▲</button>
+      <section class="calendar" id="calendarSection">
+        <div class="calendar-weekdays">
+          <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+      </section>
+      <button class="calendar-toggle" id="calendarToggle">Hide calendar ▲</button>
 
-  <section class="insights-panel" id="insightsPanel" hidden>
-    <div class="insight-ring-wrap">
-      <svg class="insight-ring" viewBox="0 0 64 64" width="64" height="64">
-        <circle class="ring-track" cx="32" cy="32" r="27" />
-        <circle class="ring-value" id="insightRingValue" cx="32" cy="32" r="27" />
-      </svg>
-      <div class="insight-ring-label">
-        <span id="insightRingPct">0%</span>
-        <span>today</span>
-      </div>
-    </div>
-    <div class="insight-stats">
-      <div class="insight-stat">
-        <span class="insight-stat-value" id="insightStreak">0</span>
-        <span class="insight-stat-label">day streak</span>
-      </div>
-      <div class="insight-sparkline" id="insightSparkline" aria-label="Last 7 days completion"></div>
-    </div>
-  </section>
-  <button class="insights-toggle" id="insightsToggle">Show insights ▾</button>
+      <section class="insights-panel" id="insightsPanel" hidden>
+        <div class="insight-ring-wrap">
+          <svg class="insight-ring" viewBox="0 0 64 64" width="64" height="64">
+            <circle class="ring-track" cx="32" cy="32" r="27" />
+            <circle class="ring-value" id="insightRingValue" cx="32" cy="32" r="27" />
+          </svg>
+          <div class="insight-ring-label">
+            <span id="insightRingPct">0%</span>
+            <span>today</span>
+          </div>
+        </div>
+        <div class="insight-stats">
+          <div class="insight-stat">
+            <span class="insight-stat-value" id="insightStreak">0</span>
+            <span class="insight-stat-label">day streak</span>
+          </div>
+          <div class="insight-sparkline" id="insightSparkline" aria-label="Last 7 days completion"></div>
+        </div>
+      </section>
+      <button class="insights-toggle" id="insightsToggle">Show insights ▾</button>
+    </aside>
 
-  <section class="toolbar" id="toolbar">
-    <div class="toolbar-search">
-      <span class="toolbar-search-icon">⌕</span>
-      <input type="search" id="searchInput" placeholder="Search tasks…" aria-label="Search tasks" />
-    </div>
-    <div class="toolbar-row">
-      <div class="chip-group" id="categoryChips" role="group" aria-label="Filter by category"></div>
-      <select id="sortSelect" class="toolbar-select" aria-label="Sort tasks">
-        <option value="time">Sort: Time</option>
-        <option value="priority">Sort: Priority</option>
-        <option value="alpha">Sort: A–Z</option>
-        <option value="status">Sort: Status</option>
-        <option value="manual">Sort: Manual</option>
-      </select>
-    </div>
-  </section>
+    <div class="app-main">
+      <section class="toolbar" id="toolbar">
+        <div class="toolbar-search">
+          <span class="toolbar-search-icon">⌕</span>
+          <input type="search" id="searchInput" placeholder="Search tasks…" aria-label="Search tasks" />
+        </div>
+        <div class="toolbar-row">
+          <div class="chip-group" id="categoryChips" role="group" aria-label="Filter by category"></div>
+          <select id="sortSelect" class="toolbar-select" aria-label="Sort tasks">
+            <option value="time">Sort: Time</option>
+            <option value="priority">Sort: Priority</option>
+            <option value="alpha">Sort: A–Z</option>
+            <option value="status">Sort: Status</option>
+            <option value="manual">Sort: Manual</option>
+          </select>
+        </div>
+      </section>
 
-  <main class="punchlist">
-    <div class="punchlist-header">
-      <span class="col-no">NO.</span>
-      <span class="col-check">✓</span>
-      <span class="col-task">TASK</span>
-      <span class="col-time">TIME</span>
+      <main class="punchlist">
+        <div class="punchlist-header">
+          <span class="col-no">NO.</span>
+          <span class="col-check">✓</span>
+          <span class="col-task">TASK</span>
+          <span class="col-time">TIME</span>
+        </div>
+        <div class="punchlist-body" id="taskList"></div>
+        <p class="empty-state" id="emptyState">No items logged for this sheet.<br>Tap <strong>+ LOG ITEM</strong> to add one.</p>
+      </main>
     </div>
-    <div class="punchlist-body" id="taskList"></div>
-    <p class="empty-state" id="emptyState">No items logged for this sheet.<br>Tap <strong>+ LOG ITEM</strong> to add one.</p>
-  </main>
+  </div>
 
   <button class="fab" id="addTaskBtn" aria-label="Log new task">+</button>
   <button class="install-btn" id="installBtn" hidden>APPROVED FOR FIELD USE — Install App</button>
