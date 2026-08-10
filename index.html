@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="theme-color" content="#173350" />
+<meta name="theme-color" content="#0f1f33" />
 <title>Daily Log — Task Tracker &amp; Planner</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icons/icon-192.png" />
@@ -21,7 +21,10 @@
         <span id="monthLabel">AUGUST</span>
         <span id="yearLabel">2026</span>
       </button>
-      <button id="nextMonth" class="tb-arrow" aria-label="Next month">›</button>
+      <div class="tb-nav-right">
+        <button id="themeToggle" class="tb-icon-btn" aria-label="Toggle light/dark theme">🌙</button>
+        <button id="nextMonth" class="tb-arrow" aria-label="Next month">›</button>
+      </div>
     </div>
     <div class="tb-cells">
       <div class="tb-cell">
@@ -49,6 +52,44 @@
   </section>
   <button class="calendar-toggle" id="calendarToggle">Hide calendar ▲</button>
 
+  <section class="insights-panel" id="insightsPanel" hidden>
+    <div class="insight-ring-wrap">
+      <svg class="insight-ring" viewBox="0 0 64 64" width="64" height="64">
+        <circle class="ring-track" cx="32" cy="32" r="27" />
+        <circle class="ring-value" id="insightRingValue" cx="32" cy="32" r="27" />
+      </svg>
+      <div class="insight-ring-label">
+        <span id="insightRingPct">0%</span>
+        <span>today</span>
+      </div>
+    </div>
+    <div class="insight-stats">
+      <div class="insight-stat">
+        <span class="insight-stat-value" id="insightStreak">0</span>
+        <span class="insight-stat-label">day streak</span>
+      </div>
+      <div class="insight-sparkline" id="insightSparkline" aria-label="Last 7 days completion"></div>
+    </div>
+  </section>
+  <button class="insights-toggle" id="insightsToggle">Show insights ▾</button>
+
+  <section class="toolbar" id="toolbar">
+    <div class="toolbar-search">
+      <span class="toolbar-search-icon">⌕</span>
+      <input type="search" id="searchInput" placeholder="Search tasks…" aria-label="Search tasks" />
+    </div>
+    <div class="toolbar-row">
+      <div class="chip-group" id="categoryChips" role="group" aria-label="Filter by category"></div>
+      <select id="sortSelect" class="toolbar-select" aria-label="Sort tasks">
+        <option value="time">Sort: Time</option>
+        <option value="priority">Sort: Priority</option>
+        <option value="alpha">Sort: A–Z</option>
+        <option value="status">Sort: Status</option>
+        <option value="manual">Sort: Manual</option>
+      </select>
+    </div>
+  </section>
+
   <main class="punchlist">
     <div class="punchlist-header">
       <span class="col-no">NO.</span>
@@ -72,22 +113,75 @@
 
 <div class="modal-overlay" id="modalOverlay" hidden>
   <form class="modal" id="taskForm">
-    <h2>Log Item</h2>
+    <h2 id="modalTitle">Log Item</h2>
     <label>Task
       <input type="text" id="taskTitle" required maxlength="120" placeholder="e.g. Submit HVAC load calc" />
     </label>
-    <label>Time <span class="optional">(optional)</span>
-      <input type="time" id="taskTime" />
-    </label>
+
+    <div class="field-row">
+      <label>Category
+        <select id="taskCategory">
+          <option value="work">Work</option>
+          <option value="personal">Personal</option>
+          <option value="urgent">Urgent</option>
+          <option value="health">Health</option>
+          <option value="errands">Errands</option>
+          <option value="other">Other</option>
+        </select>
+      </label>
+      <label>Priority
+        <select id="taskPriority">
+          <option value="high">High</option>
+          <option value="medium" selected>Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="field-row">
+      <label>Time <span class="optional">(optional)</span>
+        <input type="time" id="taskTime" />
+      </label>
+      <label>Repeat
+        <select id="taskRepeat">
+          <option value="none">Does not repeat</option>
+          <option value="daily">Daily</option>
+          <option value="weekdays">Weekdays (Mon–Fri)</option>
+          <option value="weekly">Weekly</option>
+        </select>
+      </label>
+    </div>
+
     <label class="checkbox-row">
       <input type="checkbox" id="taskReminder" checked />
       Alert me at this time
     </label>
+
+    <label>Notes <span class="optional">(optional)</span>
+      <textarea id="taskNotes" maxlength="300" rows="2" placeholder="Add details…"></textarea>
+    </label>
+
+    <div class="subtask-field">
+      <span class="subtask-field-label">Subtasks <span class="optional">(optional)</span></span>
+      <div id="subtaskList" class="subtask-list"></div>
+      <div class="subtask-add-row">
+        <input type="text" id="subtaskInput" maxlength="80" placeholder="Add a subtask" />
+        <button type="button" id="addSubtaskBtn" class="btn-ghost btn-small">Add</button>
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button type="button" id="cancelTask" class="btn-ghost">Cancel</button>
       <button type="submit" class="btn-solid">Save item</button>
     </div>
   </form>
+</div>
+
+<div class="confirm-overlay" id="confirmOverlay" hidden>
+  <div class="confirm-box" role="alertdialog" aria-modal="true">
+    <p id="confirmMessage">Are you sure?</p>
+    <div class="confirm-actions" id="confirmActions"></div>
+  </div>
 </div>
 
 <script src="app.js"></script>
