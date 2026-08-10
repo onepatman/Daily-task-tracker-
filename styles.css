@@ -73,8 +73,9 @@ html, body {
     var(--bg);
   padding-bottom: 96px;
   position: relative;
-  transition: background-color 200ms ease;
+  transition: background-color 200ms ease, max-width 200ms ease;
 }
+.app-sidebar, .app-main { display: block; }
 
 /* ---------- Title block header ---------- */
 .titleblock {
@@ -714,3 +715,51 @@ html, body {
 }
 .confirm-actions button.confirm-danger { background: var(--red); border-color: var(--red); color: #fff; }
 .confirm-actions button.confirm-cancel { background: transparent; }
+
+/* ---------- Desktop / laptop dashboard layout ---------- */
+@media (min-width: 900px) {
+  body { background: var(--bg-2); }
+
+  .app {
+    max-width: 1100px;
+    padding-bottom: 40px;
+  }
+
+  .titleblock { padding: 20px 28px 16px; }
+  .tb-cells { max-width: 520px; }
+
+  .app-body {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    align-items: start;
+    gap: 28px;
+    padding: 0 28px;
+  }
+
+  .app-sidebar {
+    position: sticky;
+    top: 20px;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .app-sidebar .notify-pill { margin: 12px 0 0; width: 100%; }
+  .app-sidebar .calendar { padding: 16px 0 4px; }
+  .app-sidebar .insights-panel { margin: 8px 0 0; }
+
+  .app-main { min-width: 0; }
+  .app-main .toolbar { margin: 4px 0 0; }
+  .app-main .punchlist { margin: 12px 0 0; }
+
+  .fab {
+    right: max(24px, calc((100vw - 1100px) / 2 + 24px));
+  }
+}
+
+@media (min-width: 1300px) {
+  .app { max-width: 1220px; }
+  .app-body { grid-template-columns: 340px 1fr; }
+  .fab { right: max(24px, calc((100vw - 1220px) / 2 + 24px)); }
+}
