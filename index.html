@@ -14,13 +14,22 @@
 
 <div class="app">
 
+  <div class="brand-header">
+    <p class="brand-kicker">DAILY LOG</p>
+    <h1 class="brand-title">Your Day, Beautifully Planned</h1>
+  </div>
+
   <header class="titleblock">
     <div class="tb-nav">
       <button id="prevMonth" class="tb-arrow" aria-label="Previous month">‹</button>
-      <button id="monthYearBtn" class="tb-monthyear" aria-label="Jump to today">
-        <span id="monthLabel">AUGUST</span>
-        <span id="yearLabel">2026</span>
-      </button>
+      <div class="tb-monthyear-group">
+        <select id="monthSelect" class="tb-select" aria-label="Select month"></select>
+        <select id="yearSelect" class="tb-select" aria-label="Select year"></select>
+      </div>
+      <button id="nextMonth" class="tb-arrow" aria-label="Next month">›</button>
+    </div>
+    <div class="tb-nav-secondary">
+      <button id="todayBtn" class="tb-today-btn" type="button">Jump to today</button>
       <div class="tb-nav-right">
         <button id="themeToggle" class="tb-icon-btn" aria-label="Toggle light/dark theme">🌙</button>
         <div class="more-menu-wrap">
@@ -34,29 +43,18 @@
             <input type="file" id="importFileInput" accept="application/json" hidden />
           </div>
         </div>
-        <button id="nextMonth" class="tb-arrow" aria-label="Next month">›</button>
       </div>
     </div>
-    <div class="tb-cells">
-      <div class="tb-cell">
-        <span class="tb-cell-label">SHEET</span>
-        <span class="tb-cell-value" id="sheetDate">—</span>
-      </div>
-      <div class="tb-cell">
-        <span class="tb-cell-label">DAY</span>
-        <span class="tb-cell-value" id="sheetDay">—</span>
-      </div>
-      <div class="tb-cell tb-cell-status">
-        <span class="tb-cell-label">STATUS</span>
-        <span class="tb-cell-value" id="sheetStatus">0/0 DONE</span>
-      </div>
-    </div>
+    <p class="tb-sheet-date" id="sheetDateFull">—</p>
   </header>
 
-  <div class="view-tabs" id="viewTabs" role="tablist" aria-label="View">
-    <button type="button" class="view-tab active" data-view="day" role="tab" aria-selected="true">Day</button>
-    <button type="button" class="view-tab" data-view="week" role="tab" aria-selected="false">Week</button>
-    <button type="button" class="view-tab" data-view="timeline" role="tab" aria-selected="false">Timeline</button>
+  <div class="view-tabs-row">
+    <div class="view-tabs" id="viewTabs" role="tablist" aria-label="View">
+      <button type="button" class="view-tab active" data-view="day" role="tab" aria-selected="true">Day</button>
+      <button type="button" class="view-tab" data-view="week" role="tab" aria-selected="false">Week</button>
+      <button type="button" class="view-tab" data-view="timeline" role="tab" aria-selected="false">Timeline</button>
+    </div>
+    <span class="view-status-badge" id="viewStatusBadge">0/0 done</span>
   </div>
 
   <div class="app-body">
@@ -105,7 +103,12 @@
           <input type="search" id="searchInput" placeholder="Search tasks… (/)" aria-label="Search tasks" />
         </div>
         <div class="toolbar-row">
+          <span class="toolbar-row-label">Category</span>
           <div class="chip-group" id="categoryChips" role="group" aria-label="Filter by category"></div>
+        </div>
+        <div class="toolbar-row">
+          <span class="toolbar-row-label">Priority</span>
+          <div class="chip-group" id="priorityChips" role="group" aria-label="Filter by priority"></div>
           <select id="sortSelect" class="toolbar-select" aria-label="Sort tasks">
             <option value="time">Sort: Time</option>
             <option value="priority">Sort: Priority</option>
@@ -131,6 +134,10 @@
       <div class="timeline-view" id="timelineView" hidden></div>
     </div>
   </div>
+
+  <footer class="app-footer">
+    <p>DAILY LOG — crafted for people who get things done.</p>
+  </footer>
 
   <button class="fab" id="addTaskBtn" aria-label="Log new task">+</button>
   <button class="install-btn" id="installBtn" hidden>APPROVED FOR FIELD USE — Install App</button>
@@ -166,11 +173,47 @@
 
     <div class="field-row">
       <label>Date
-        <input type="date" id="taskDate" />
+        <button type="button" id="taskDateBtn" class="picker-trigger">
+          <span id="taskDateDisplay">Select date</span>
+          <span class="picker-trigger-icon">📅</span>
+        </button>
+        <input type="hidden" id="taskDate" />
       </label>
-      <label>Time <span class="optional">(optional)</span>
-        <input type="time" id="taskTime" />
+      <label>Time
+        <button type="button" id="taskTimeBtn" class="picker-trigger">
+          <span id="taskTimeDisplay">No time set</span>
+          <span class="picker-trigger-icon">🕐</span>
+        </button>
+        <input type="hidden" id="taskTime" />
       </label>
+    </div>
+
+    <div class="date-picker-popover" id="datePickerPopover" hidden>
+      <div class="dp-nav">
+        <button type="button" id="dpPrev" aria-label="Previous month">‹</button>
+        <span id="dpMonthYear"></span>
+        <button type="button" id="dpNext" aria-label="Next month">›</button>
+      </div>
+      <div class="dp-weekdays"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+      <div class="dp-grid" id="dpGrid"></div>
+    </div>
+
+    <div class="time-picker-popover" id="timePickerPopover" hidden>
+      <div class="tp-display">
+        <span id="tpHourDisplay">12</span><span class="tp-colon">:</span><span id="tpMinuteDisplay">00</span>
+        <div class="tp-ampm">
+          <button type="button" class="tp-ampm-btn" data-ampm="AM">AM</button>
+          <button type="button" class="tp-ampm-btn" data-ampm="PM">PM</button>
+        </div>
+      </div>
+      <div class="tp-clock" id="tpClock">
+        <div class="tp-clock-hand" id="tpHand"></div>
+        <div class="tp-clock-center"></div>
+      </div>
+      <div class="tp-actions">
+        <button type="button" id="tpClear" class="btn-ghost btn-small">Clear</button>
+        <button type="button" id="tpDone" class="btn-solid btn-small">Done</button>
+      </div>
     </div>
 
     <div class="field-row">
@@ -207,12 +250,15 @@
       Alert me at this time
     </label>
 
-    <label>Notes <span class="optional">(optional)</span>
+    <label>Notes
       <textarea id="taskNotes" maxlength="300" rows="2" placeholder="Add details…"></textarea>
     </label>
 
     <div class="subtask-field">
-      <span class="subtask-field-label">Subtasks <span class="optional">(optional)</span></span>
+      <div class="subtask-field-head">
+        <span class="subtask-field-label">Subtasks</span>
+        <span class="subtask-field-progress" id="subtaskFieldProgress"></span>
+      </div>
       <div id="subtaskList" class="subtask-list"></div>
       <div class="subtask-add-row">
         <input type="text" id="subtaskInput" maxlength="80" placeholder="Add a subtask" />
@@ -241,6 +287,19 @@
       <button type="button" id="closeReport" aria-label="Close">✕</button>
     </div>
     <div class="report-body" id="reportBody"></div>
+  </div>
+</div>
+
+<div class="day-detail-overlay" id="dayDetailOverlay" hidden>
+  <div class="day-detail-box" role="dialog" aria-modal="true" aria-label="Day detail">
+    <div class="day-detail-header">
+      <div>
+        <h2 id="dayDetailTitle">—</h2>
+        <button type="button" id="dayDetailViewFull" class="day-detail-viewfull">View full day →</button>
+      </div>
+      <button type="button" id="closeDayDetail" aria-label="Close">✕</button>
+    </div>
+    <div class="day-detail-body" id="dayDetailBody"></div>
   </div>
 </div>
 

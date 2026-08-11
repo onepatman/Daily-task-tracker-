@@ -7,6 +7,7 @@
   const MONTHS = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY",
     "AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
   const DAY_NAMES = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+  const FULL_DAY_NAMES = ["SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY"];
 
   const CATEGORIES = {
     work:     { label: "Work",     color: "var(--cat-work)" },
@@ -16,9 +17,16 @@
     errands:  { label: "Errands",  color: "var(--cat-errands)" },
     other:    { label: "Other",    color: "var(--cat-other)" },
   };
+  const PRIORITIES = {
+    high:   { label: "High",   color: "var(--red)" },
+    medium: { label: "Medium", color: "var(--amber)" },
+    low:    { label: "Low",    color: "var(--accent-2)" },
+  };
   const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
   const RING_CIRCUMFERENCE = 2 * Math.PI * 27;
   const SNOOZE_MS = 10 * 60000;
+  const CLOCK_SIZE = 200;
+  const CLOCK_R = 76;
 
   // ---------- State ----------
   const today = new Date();
@@ -31,6 +39,7 @@
   let insightsOpen = false;
   let searchQuery = "";
   let activeCategories = new Set();
+  let activePriorities = new Set();
   let sortMode = "time";
   let currentView = "day"; // 'day' | 'week' | 'timeline'
   let editingTask = null;
@@ -40,14 +49,21 @@
   let snackbarTimer = null;
   let activeReminderTask = null;
   let activeReminderDateKey = null;
+  let dpViewYear = viewYear, dpViewMonth = viewMonth;
+  let tpMode = "hour";
+  let tpHour24 = null;
+  let tpMinute = 0;
+  let tpAmPm = "AM";
+  let dayDetailDateKey = null;
 
   // ---------- Elements ----------
   const el = {
-    monthLabel: document.getElementById("monthLabel"),
-    yearLabel: document.getElementById("yearLabel"),
     prevMonth: document.getElementById("prevMonth"),
     nextMonth: document.getElementById("nextMonth"),
-    monthYearBtn: document.getElementById("monthYearBtn"),
+    monthSelect: document.getElementById("monthSelect"),
+    yearSelect: document.getElementById("yearSelect"),
+    todayBtn: document.getElementById("todayBtn"),
+    sheetDateFull: document.getElementById("sheetDateFull"),
     themeToggle: document.getElementById("themeToggle"),
     moreMenuBtn: document.getElementById("moreMenuBtn"),
     moreMenu: document.getElementById("moreMenu"),
@@ -58,6 +74,7 @@
     menuImport: document.getElementById("menuImport"),
     importFileInput: document.getElementById("importFileInput"),
     viewTabs: document.getElementById("viewTabs"),
+    viewStatusBadge: document.getElementById("viewStatusBadge"),
     calendarGrid: document.getElementById("calendarGrid"),
     calendarSection: document.getElementById("calendarSection"),
     calendarToggle: document.getElementById("calendarToggle"),
@@ -69,14 +86,12 @@
     insightSparkline: document.getElementById("insightSparkline"),
     searchInput: document.getElementById("searchInput"),
     categoryChips: document.getElementById("categoryChips"),
+    priorityChips: document.getElementById("priorityChips"),
     sortSelect: document.getElementById("sortSelect"),
     punchlist: document.querySelector(".punchlist"),
     dayView: document.getElementById("dayView"),
     weekView: document.getElementById("weekView"),
     timelineView: document.getElementById("timelineView"),
-    sheetDate: document.getElementById("sheetDate"),
-    sheetDay: document.getElementById("sheetDay"),
-    sheetStatus: document.getElementById("sheetStatus"),
     printDate: document.getElementById("printDate"),
     taskList: document.getElementById("taskList"),
     emptyState: document.getElementById("emptyState"),
@@ -90,12 +105,30 @@
     deleteTemplateBtn: document.getElementById("deleteTemplateBtn"),
     taskTitle: document.getElementById("taskTitle"),
     taskDate: document.getElementById("taskDate"),
+    taskDateBtn: document.getElementById("taskDateBtn"),
+    taskDateDisplay: document.getElementById("taskDateDisplay"),
+    datePickerPopover: document.getElementById("datePickerPopover"),
+    dpPrev: document.getElementById("dpPrev"),
+    dpNext: document.getElementById("dpNext"),
+    dpMonthYear: document.getElementById("dpMonthYear"),
+    dpGrid: document.getElementById("dpGrid"),
     taskCategory: document.getElementById("taskCategory"),
     taskPriority: document.getElementById("taskPriority"),
     taskTime: document.getElementById("taskTime"),
+    taskTimeBtn: document.getElementById("taskTimeBtn"),
+    taskTimeDisplay: document.getElementById("taskTimeDisplay"),
+    timePickerPopover: document.getElementById("timePickerPopover"),
+    tpHourDisplay: document.getElementById("tpHourDisplay"),
+    tpMinuteDisplay: document.getElementById("tpMinuteDisplay"),
+    tpAmpmButtons: Array.from(document.querySelectorAll(".tp-ampm-btn")),
+    tpClock: document.getElementById("tpClock"),
+    tpHand: document.getElementById("tpHand"),
+    tpClear: document.getElementById("tpClear"),
+    tpDone: document.getElementById("tpDone"),
     taskRepeat: document.getElementById("taskRepeat"),
     taskReminder: document.getElementById("taskReminder"),
     taskNotes: document.getElementById("taskNotes"),
+    subtaskFieldProgress: document.getElementById("subtaskFieldProgress"),
     subtaskList: document.getElementById("subtaskList"),
     subtaskInput: document.getElementById("subtaskInput"),
     addSubtaskBtn: document.getElementById("addSubtaskBtn"),
@@ -106,6 +139,11 @@
     reportOverlay: document.getElementById("reportOverlay"),
     reportBody: document.getElementById("reportBody"),
     closeReport: document.getElementById("closeReport"),
+    dayDetailOverlay: document.getElementById("dayDetailOverlay"),
+    dayDetailTitle: document.getElementById("dayDetailTitle"),
+    dayDetailBody: document.getElementById("dayDetailBody"),
+    closeDayDetail: document.getElementById("closeDayDetail"),
+    dayDetailViewFull: document.getElementById("dayDetailViewFull"),
     snackbar: document.getElementById("snackbar"),
     snackbarText: document.getElementById("snackbarText"),
     snackbarUndo: document.getElementById("snackbarUndo"),
@@ -138,6 +176,16 @@
     let hour12 = h % 12;
     if (hour12 === 0) hour12 = 12;
     return `${hour12}${period}`;
+  }
+  function formatDateDisplay(key) {
+    const d = parseDateKey(key);
+    return `${DAY_NAMES[d.getDay()]}, ${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}, ${d.getFullYear()}`;
+  }
+  function formatTimeDisplay(hhmm) {
+    const [h, m] = hhmm.split(":").map(Number);
+    const period = h >= 12 ? "PM" : "AM";
+    let h12 = h % 12; if (h12 === 0) h12 = 12;
+    return `${h12}:${String(m).padStart(2, "0")} ${period}`;
   }
 
   // ---------- Persistence & migration ----------
@@ -243,6 +291,16 @@
   }
   function tasksForDate(dateKey) {
     return tasks.filter((t) => occursOn(t, dateKey));
+  }
+  function computeDayCompletion(dateKey) {
+    const list = tasksForDate(dateKey);
+    if (list.length === 0) return null;
+    let sum = 0;
+    list.forEach((t) => {
+      if (t.subtasks && t.subtasks.length) sum += t.subtasks.filter((s) => s.done).length / t.subtasks.length;
+      else sum += isDoneOn(t, dateKey) ? 1 : 0;
+    });
+    return Math.round((sum / list.length) * 100);
   }
 
   // ---------- Confirm dialog ----------
@@ -355,7 +413,15 @@
     if (el.moreMenu.hidden) openMoreMenu(); else closeMoreMenu();
   });
   document.addEventListener("click", (e) => {
-    if (!el.moreMenu.hidden && !e.target.closest(".more-menu-wrap")) closeMoreMenu();
+    // Use composedPath() instead of e.target.closest(): handlers below can
+    // remove/replace e.target's own DOM node synchronously (e.g. rebuilding
+    // the clock face), which would detach it before this bubbled listener
+    // runs and make closest() unreliable. composedPath() is a snapshot
+    // captured at dispatch time, so it stays valid either way.
+    const path = e.composedPath();
+    if (!el.moreMenu.hidden && !path.includes(el.moreMenuBtn) && !path.includes(el.moreMenu)) closeMoreMenu();
+    if (!el.datePickerPopover.hidden && !path.includes(el.taskDateBtn) && !path.includes(el.datePickerPopover)) closeDatePicker();
+    if (!el.timePickerPopover.hidden && !path.includes(el.taskTimeBtn) && !path.includes(el.timePickerPopover)) closeTimePicker();
   });
 
   // ---------- View tabs (Day / Week / Timeline) ----------
@@ -369,6 +435,7 @@
     el.dayView.hidden = view !== "day";
     el.weekView.hidden = view !== "week";
     el.timelineView.hidden = view !== "timeline";
+    updateViewStatusBadge();
     renderCurrentView();
   }
   el.viewTabs.querySelectorAll(".view-tab").forEach((tab) => {
@@ -380,10 +447,43 @@
     else renderSheet();
   }
 
+  // ---------- Month / year navigation ----------
+  function populateMonthYearSelects() {
+    el.monthSelect.innerHTML = "";
+    MONTHS.forEach((m, i) => {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = m;
+      el.monthSelect.appendChild(opt);
+    });
+    el.yearSelect.innerHTML = "";
+    const startY = today.getFullYear() - 5, endY = today.getFullYear() + 5;
+    for (let y = startY; y <= endY; y++) {
+      const opt = document.createElement("option");
+      opt.value = String(y);
+      opt.textContent = String(y);
+      el.yearSelect.appendChild(opt);
+    }
+  }
+  el.monthSelect.addEventListener("change", () => {
+    viewMonth = Number(el.monthSelect.value);
+    renderCalendar();
+  });
+  el.yearSelect.addEventListener("change", () => {
+    viewYear = Number(el.yearSelect.value);
+    renderCalendar();
+  });
+  el.todayBtn.addEventListener("click", () => {
+    viewYear = today.getFullYear();
+    viewMonth = today.getMonth();
+    selectedDate = toDateKey(today);
+    renderAll();
+  });
+
   // ---------- Calendar rendering ----------
   function renderCalendar() {
-    el.monthLabel.textContent = MONTHS[viewMonth];
-    el.yearLabel.textContent = String(viewYear);
+    el.monthSelect.value = String(viewMonth);
+    el.yearSelect.value = String(viewYear);
     el.calendarGrid.innerHTML = "";
 
     const firstOfMonth = new Date(viewYear, viewMonth, 1);
@@ -431,6 +531,7 @@
     const q = searchQuery.trim().toLowerCase();
     if (q) list = list.filter((t) => t.title.toLowerCase().includes(q) || (t.notes || "").toLowerCase().includes(q));
     if (activeCategories.size) list = list.filter((t) => activeCategories.has(t.category));
+    if (activePriorities.size) list = list.filter((t) => activePriorities.has(t.priority));
 
     list = list.slice();
     switch (sortMode) {
@@ -452,41 +553,70 @@
     return list;
   }
 
-  function renderCategoryChips() {
-    el.categoryChips.innerHTML = "";
-    Object.entries(CATEGORIES).forEach(([key, info]) => {
+  function renderChipGroup(container, options, activeSet, onChange) {
+    container.innerHTML = "";
+    const allChip = document.createElement("button");
+    allChip.type = "button";
+    allChip.className = "chip" + (activeSet.size === 0 ? " active" : "");
+    allChip.textContent = "All";
+    allChip.addEventListener("click", () => {
+      activeSet.clear();
+      container.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+      allChip.classList.add("active");
+      onChange();
+    });
+    container.appendChild(allChip);
+
+    options.forEach(({ key, label, color }) => {
       const chip = document.createElement("button");
       chip.type = "button";
-      chip.className = "chip" + (activeCategories.has(key) ? " active" : "");
+      chip.className = "chip" + (activeSet.has(key) ? " active" : "");
       const dot = document.createElement("span");
       dot.className = "chip-dot";
-      dot.style.background = info.color;
-      chip.append(dot, document.createTextNode(info.label));
+      dot.style.background = color;
+      chip.append(dot, document.createTextNode(label));
       chip.addEventListener("click", () => {
-        if (activeCategories.has(key)) activeCategories.delete(key);
-        else activeCategories.add(key);
+        if (activeSet.has(key)) activeSet.delete(key);
+        else activeSet.add(key);
         chip.classList.toggle("active");
-        renderCurrentView();
+        allChip.classList.toggle("active", activeSet.size === 0);
+        onChange();
       });
-      el.categoryChips.appendChild(chip);
+      container.appendChild(chip);
     });
   }
+  function renderCategoryChips() {
+    const opts = Object.entries(CATEGORIES).map(([key, info]) => ({ key, label: info.label, color: info.color }));
+    renderChipGroup(el.categoryChips, opts, activeCategories, renderCurrentView);
+  }
+  function renderPriorityChips() {
+    const opts = Object.entries(PRIORITIES).map(([key, info]) => ({ key, label: info.label, color: info.color }));
+    renderChipGroup(el.priorityChips, opts, activePriorities, renderCurrentView);
+  }
 
-  // ---------- Sheet header (date/day/status), shared across views ----------
+  // ---------- Sheet header (date/status), shared across views ----------
   function updateSheetHeader() {
     const dateObj = parseDateKey(selectedDate);
-    const dateStr =
-      String(dateObj.getMonth() + 1).padStart(2, "0") + "." +
-      String(dateObj.getDate()).padStart(2, "0") + "." +
-      dateObj.getFullYear();
-    const dayStr = DAY_NAMES[dateObj.getDay()];
-    el.sheetDate.textContent = dateStr;
-    el.sheetDay.textContent = dayStr;
-
-    const allDayTasks = tasksForDate(selectedDate);
-    const doneCount = allDayTasks.filter((t) => isDoneOn(t, selectedDate)).length;
-    el.sheetStatus.textContent = `${doneCount}/${allDayTasks.length} DONE`;
-    el.printDate.textContent = `${dayStr} · ${dateStr}`;
+    const fullDateStr = `${FULL_DAY_NAMES[dateObj.getDay()]}, ${MONTHS[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
+    el.sheetDateFull.textContent = fullDateStr;
+    el.printDate.textContent = fullDateStr;
+    updateViewStatusBadge();
+  }
+  function updateViewStatusBadge() {
+    if (currentView === "week") {
+      const weekStart = getWeekStart(selectedDate);
+      let total = 0, done = 0;
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(weekStart); d.setDate(d.getDate() + i);
+        const key = toDateKey(d);
+        tasksForDate(key).forEach((t) => { total++; if (isDoneOn(t, key)) done++; });
+      }
+      el.viewStatusBadge.textContent = `${done}/${total} done this week`;
+    } else {
+      const list = tasksForDate(selectedDate);
+      const done = list.filter((t) => isDoneOn(t, selectedDate)).length;
+      el.viewStatusBadge.textContent = `${done}/${list.length} done today`;
+    }
   }
 
   // ---------- Day view (punch-list) ----------
@@ -742,20 +872,40 @@
       }
       head.appendChild(title);
 
-      const dayTasks = getVisibleTasks(key).sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
-      const doneCount = dayTasks.filter((t) => isDoneOn(t, key)).length;
+      const allDay = tasksForDate(key);
+      const pct = computeDayCompletion(key);
+      const metaWrap = document.createElement("div");
+      metaWrap.className = "week-day-meta";
+      if (pct != null) {
+        const pctEl = document.createElement("span");
+        pctEl.className = "week-day-pct";
+        pctEl.textContent = pct + "%";
+        metaWrap.appendChild(pctEl);
+      }
+      const doneCount = allDay.filter((t) => isDoneOn(t, key)).length;
       const count = document.createElement("span");
       count.className = "week-day-count";
-      count.textContent = dayTasks.length ? `${doneCount}/${dayTasks.length}` : "";
-      head.appendChild(count);
+      count.textContent = allDay.length ? `${doneCount}/${allDay.length}` : "";
+      metaWrap.appendChild(count);
+      head.appendChild(metaWrap);
       card.appendChild(head);
 
+      if (pct != null) {
+        const bar = document.createElement("div");
+        bar.className = "week-day-bar";
+        const fill = document.createElement("span");
+        fill.style.width = pct + "%";
+        bar.appendChild(fill);
+        card.appendChild(bar);
+      }
+
+      const dayTasks = getVisibleTasks(key);
       const list = document.createElement("div");
       list.className = "week-day-tasks";
       if (dayTasks.length === 0) {
         const empty = document.createElement("div");
         empty.className = "week-day-empty";
-        empty.textContent = "No tasks";
+        empty.textContent = allDay.length ? "No tasks match filters" : "No tasks";
         list.appendChild(empty);
       } else {
         dayTasks.slice(0, 6).forEach((t) => {
@@ -771,7 +921,6 @@
           time.className = "week-task-time";
           time.textContent = t.time || "";
           row.append(dot, ttl, time);
-          row.addEventListener("click", (e) => { e.stopPropagation(); openEditModal(t, key); });
           list.appendChild(row);
         });
         if (dayTasks.length > 6) {
@@ -785,12 +934,121 @@
 
       card.addEventListener("click", () => {
         selectedDate = key;
-        setView("day");
         renderCalendar();
+        if (allDay.length > 0) openDayDetail(key);
+        else setView("day");
       });
       el.weekView.appendChild(card);
     }
   }
+
+  // ---------- Day detail popup (from Week view) ----------
+  function openDayDetail(dateKey) {
+    dayDetailDateKey = dateKey;
+    renderDayDetail();
+    el.dayDetailOverlay.hidden = false;
+  }
+  function closeDayDetail() {
+    el.dayDetailOverlay.hidden = true;
+    dayDetailDateKey = null;
+  }
+  function renderDayDetail() {
+    const dateObj = parseDateKey(dayDetailDateKey);
+    el.dayDetailTitle.textContent = `${DAY_NAMES[dateObj.getDay()]}, ${MONTHS[dateObj.getMonth()].slice(0, 3)} ${dateObj.getDate()}`;
+    el.dayDetailBody.innerHTML = "";
+    const list = tasksForDate(dayDetailDateKey).sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
+    if (list.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "day-detail-empty";
+      empty.textContent = "No tasks logged for this day.";
+      el.dayDetailBody.appendChild(empty);
+      return;
+    }
+    list.forEach((task) => el.dayDetailBody.appendChild(buildDayDetailCard(task, dayDetailDateKey)));
+  }
+  function buildDayDetailCard(task, dateKey) {
+    const done = isDoneOn(task, dateKey);
+    const card = document.createElement("div");
+    card.className = "day-detail-card cat-" + (CATEGORIES[task.category] ? task.category : "other");
+
+    const head = document.createElement("div");
+    head.className = "day-detail-card-head";
+    const title = document.createElement("span");
+    title.className = "day-detail-card-title" + (done ? " done" : "");
+    title.textContent = task.title;
+    head.appendChild(title);
+    if (task.time) {
+      const time = document.createElement("span");
+      time.className = "day-detail-card-time";
+      time.textContent = task.time;
+      head.appendChild(time);
+    }
+    card.appendChild(head);
+
+    const meta = document.createElement("div");
+    meta.className = "day-detail-card-meta";
+    const catInfo = CATEGORIES[task.category] || CATEGORIES.other;
+    const catChip = document.createElement("span");
+    catChip.className = "task-cat-chip";
+    catChip.style.background = catInfo.color;
+    catChip.textContent = catInfo.label;
+    meta.appendChild(catChip);
+    const pri = document.createElement("span");
+    pri.className = "task-priority";
+    const priDot = document.createElement("span");
+    priDot.className = "task-priority-dot " + task.priority;
+    pri.append(priDot, document.createTextNode(task.priority));
+    meta.appendChild(pri);
+    card.appendChild(meta);
+
+    if (task.subtasks && task.subtasks.length) {
+      const subWrap = document.createElement("div");
+      subWrap.className = "day-detail-subtasks";
+      task.subtasks.forEach((s) => {
+        const row = document.createElement("div");
+        row.className = "day-detail-subtask-row" + (s.done ? " done" : "");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !!s.done;
+        cb.addEventListener("change", () => {
+          s.done = cb.checked;
+          saveTasks();
+          renderAll();
+        });
+        const span = document.createElement("span");
+        span.textContent = s.title;
+        row.append(cb, span);
+        subWrap.appendChild(row);
+      });
+      card.appendChild(subWrap);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "day-detail-card-actions";
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "primary";
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", () => { closeDayDetail(); openEditModal(task, dateKey); });
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "danger";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", () => requestDelete(task, dateKey));
+    actions.append(editBtn, deleteBtn);
+    card.appendChild(actions);
+
+    return card;
+  }
+  el.closeDayDetail.addEventListener("click", closeDayDetail);
+  el.dayDetailOverlay.addEventListener("click", (e) => { if (e.target === el.dayDetailOverlay) closeDayDetail(); });
+  el.dayDetailViewFull.addEventListener("click", () => {
+    const key = dayDetailDateKey;
+    closeDayDetail();
+    selectedDate = key;
+    setView("day");
+    renderCalendar();
+  });
 
   // ---------- Timeline view ----------
   function renderTimelineView() {
@@ -918,6 +1176,7 @@
     updateSheetHeader();
     renderCurrentView();
     updateInsights();
+    if (!el.dayDetailOverlay.hidden && dayDetailDateKey) renderDayDetail();
   }
 
   // ---------- Weekly review report ----------
@@ -1095,15 +1354,24 @@
   });
 
   // ---------- Subtasks (modal) ----------
+  function updateSubtaskFieldProgress() {
+    if (!modalSubtasks.length) { el.subtaskFieldProgress.textContent = ""; return; }
+    const done = modalSubtasks.filter((s) => s.done).length;
+    el.subtaskFieldProgress.textContent = `${done}/${modalSubtasks.length} done`;
+  }
   function renderSubtaskList() {
     el.subtaskList.innerHTML = "";
     modalSubtasks.forEach((s, idx) => {
       const item = document.createElement("div");
-      item.className = "subtask-item";
+      item.className = "subtask-item" + (s.done ? " done" : "");
       const check = document.createElement("input");
       check.type = "checkbox";
       check.checked = !!s.done;
-      check.addEventListener("change", () => { s.done = check.checked; });
+      check.addEventListener("change", () => {
+        s.done = check.checked;
+        item.classList.toggle("done", s.done);
+        updateSubtaskFieldProgress();
+      });
       const span = document.createElement("span");
       span.textContent = s.title;
       const removeBtn = document.createElement("button");
@@ -1114,6 +1382,7 @@
       item.append(check, span, removeBtn);
       el.subtaskList.appendChild(item);
     });
+    updateSubtaskFieldProgress();
   }
   function addSubtaskFromInput() {
     const val = el.subtaskInput.value.trim();
@@ -1126,6 +1395,169 @@
   el.addSubtaskBtn.addEventListener("click", addSubtaskFromInput);
   el.subtaskInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); addSubtaskFromInput(); }
+  });
+
+  // ---------- Date picker (modal) ----------
+  function openDatePicker() {
+    const base = el.taskDate.value ? parseDateKey(el.taskDate.value) : new Date();
+    dpViewYear = base.getFullYear();
+    dpViewMonth = base.getMonth();
+    renderDatePicker();
+    el.datePickerPopover.hidden = false;
+    el.taskDateBtn.classList.add("active");
+    closeTimePicker();
+  }
+  function closeDatePicker() {
+    el.datePickerPopover.hidden = true;
+    el.taskDateBtn.classList.remove("active");
+  }
+  function renderDatePicker() {
+    el.dpMonthYear.textContent = `${MONTHS[dpViewMonth]} ${dpViewYear}`;
+    el.dpGrid.innerHTML = "";
+    const firstOfMonth = new Date(dpViewYear, dpViewMonth, 1);
+    const startOffset = firstOfMonth.getDay();
+    const daysInMonth = new Date(dpViewYear, dpViewMonth + 1, 0).getDate();
+    for (let i = 0; i < startOffset; i++) {
+      const blank = document.createElement("div");
+      blank.className = "dp-day blank";
+      el.dpGrid.appendChild(blank);
+    }
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateObj = new Date(dpViewYear, dpViewMonth, day);
+      const key = toDateKey(dateObj);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "dp-day";
+      if (key === toDateKey(today)) btn.classList.add("today");
+      if (key === el.taskDate.value) btn.classList.add("selected");
+      btn.textContent = String(day);
+      btn.addEventListener("click", () => {
+        el.taskDate.value = key;
+        el.taskDateDisplay.textContent = formatDateDisplay(key);
+        closeDatePicker();
+      });
+      el.dpGrid.appendChild(btn);
+    }
+  }
+  el.dpPrev.addEventListener("click", () => {
+    dpViewMonth--; if (dpViewMonth < 0) { dpViewMonth = 11; dpViewYear--; }
+    renderDatePicker();
+  });
+  el.dpNext.addEventListener("click", () => {
+    dpViewMonth++; if (dpViewMonth > 11) { dpViewMonth = 0; dpViewYear++; }
+    renderDatePicker();
+  });
+  el.taskDateBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (el.datePickerPopover.hidden) openDatePicker(); else closeDatePicker();
+  });
+
+  // ---------- Analog time picker (modal) ----------
+  function polarPos(index) {
+    const angle = (index / 12) * 2 * Math.PI;
+    const cx = CLOCK_SIZE / 2, cy = CLOCK_SIZE / 2;
+    return { x: cx + CLOCK_R * Math.sin(angle), y: cy - CLOCK_R * Math.cos(angle) };
+  }
+  function buildClockFace() {
+    el.tpClock.querySelectorAll(".tp-num").forEach((n) => n.remove());
+    const values = tpMode === "hour" ? [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] : [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+    values.forEach((val, i) => {
+      const pos = polarPos(i);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "tp-num";
+      btn.textContent = tpMode === "minute" ? String(val).padStart(2, "0") : String(val);
+      btn.style.left = (pos.x - 16) + "px";
+      btn.style.top = (pos.y - 16) + "px";
+      btn.addEventListener("click", () => selectClockValue(val));
+      el.tpClock.appendChild(btn);
+    });
+    updateHand();
+  }
+  function currentSelectedIndex() {
+    if (tpMode === "hour") {
+      if (tpHour24 == null) return null;
+      const base = tpHour24 % 12;
+      return base === 0 ? 0 : base;
+    }
+    return Math.round(tpMinute / 5) % 12;
+  }
+  function updateHand() {
+    const idx = currentSelectedIndex();
+    el.tpClock.querySelectorAll(".tp-num").forEach((btn, i) => btn.classList.toggle("selected", i === idx));
+    if (idx == null) { el.tpHand.style.opacity = "0"; return; }
+    el.tpHand.style.opacity = "1";
+    el.tpHand.style.transform = `rotate(${(idx / 12) * 360}deg)`;
+  }
+  function selectClockValue(val) {
+    if (tpMode === "hour") {
+      const base = val % 12;
+      tpHour24 = base + (tpAmPm === "PM" ? 12 : 0);
+      tpMode = "minute";
+      buildClockFace();
+    } else {
+      tpMinute = val;
+      updateHand();
+    }
+    updateTimeReadout();
+  }
+  function updateAmPmButtons() {
+    el.tpAmpmButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.ampm === tpAmPm));
+  }
+  el.tpAmpmButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      tpAmPm = btn.dataset.ampm;
+      updateAmPmButtons();
+      if (tpHour24 != null) {
+        const base = tpHour24 % 12;
+        tpHour24 = base + (tpAmPm === "PM" ? 12 : 0);
+      }
+      updateTimeReadout();
+    });
+  });
+  function updateTimeReadout() {
+    const h12 = tpHour24 == null ? 12 : (tpHour24 % 12 === 0 ? 12 : tpHour24 % 12);
+    el.tpHourDisplay.textContent = String(h12);
+    el.tpMinuteDisplay.textContent = String(tpMinute).padStart(2, "0");
+  }
+  function openTimePicker() {
+    if (el.taskTime.value) {
+      const [h, m] = el.taskTime.value.split(":").map(Number);
+      tpHour24 = h; tpMinute = m; tpAmPm = h >= 12 ? "PM" : "AM";
+    } else {
+      tpHour24 = null; tpMinute = 0;
+      tpAmPm = new Date().getHours() >= 12 ? "PM" : "AM";
+    }
+    tpMode = "hour";
+    updateAmPmButtons();
+    buildClockFace();
+    updateTimeReadout();
+    el.timePickerPopover.hidden = false;
+    el.taskTimeBtn.classList.add("active");
+    closeDatePicker();
+  }
+  function closeTimePicker() {
+    el.timePickerPopover.hidden = true;
+    el.taskTimeBtn.classList.remove("active");
+  }
+  el.taskTimeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (el.timePickerPopover.hidden) openTimePicker(); else closeTimePicker();
+  });
+  el.tpDone.addEventListener("click", () => {
+    if (tpHour24 == null) {
+      el.taskTime.value = "";
+      el.taskTimeDisplay.textContent = "No time set";
+    } else {
+      el.taskTime.value = `${String(tpHour24).padStart(2, "0")}:${String(tpMinute).padStart(2, "0")}`;
+      el.taskTimeDisplay.textContent = formatTimeDisplay(el.taskTime.value);
+    }
+    closeTimePicker();
+  });
+  el.tpClear.addEventListener("click", () => {
+    el.taskTime.value = "";
+    el.taskTimeDisplay.textContent = "No time set";
+    closeTimePicker();
   });
 
   // ---------- Templates (modal) ----------
@@ -1148,6 +1580,7 @@
     el.taskCategory.value = tpl.category;
     el.taskPriority.value = tpl.priority;
     el.taskTime.value = tpl.time || "";
+    el.taskTimeDisplay.textContent = tpl.time ? formatTimeDisplay(tpl.time) : "No time set";
     el.taskRepeat.value = tpl.repeat || "none";
     el.taskReminder.checked = tpl.reminder !== false;
     el.taskNotes.value = tpl.notes || "";
@@ -1193,6 +1626,9 @@
     renderSubtaskList();
     el.modalTitle.textContent = "Log Item";
     el.taskDate.value = selectedDate;
+    el.taskDateDisplay.textContent = formatDateDisplay(selectedDate);
+    el.taskTime.value = "";
+    el.taskTimeDisplay.textContent = "No time set";
     el.taskCategory.value = "work";
     el.taskPriority.value = "medium";
     el.taskRepeat.value = "none";
@@ -1201,6 +1637,8 @@
     renderTemplateOptions();
     el.templateSelect.value = "";
     el.deleteTemplateBtn.hidden = true;
+    closeDatePicker();
+    closeTimePicker();
     el.modalOverlay.hidden = false;
     setTimeout(() => el.taskTitle.focus(), 50);
   }
@@ -1209,9 +1647,11 @@
     editingDateKey = dateKey;
     el.taskTitle.value = task.title;
     el.taskDate.value = task.startDate;
+    el.taskDateDisplay.textContent = formatDateDisplay(task.startDate);
     el.taskCategory.value = task.category;
     el.taskPriority.value = task.priority;
     el.taskTime.value = task.time || "";
+    el.taskTimeDisplay.textContent = task.time ? formatTimeDisplay(task.time) : "No time set";
     el.taskRepeat.value = task.repeat;
     el.taskReminder.checked = task.reminder;
     el.taskNotes.value = task.notes || "";
@@ -1219,11 +1659,15 @@
     renderSubtaskList();
     el.modalTitle.textContent = "Edit Item";
     el.templateRow.hidden = true;
+    closeDatePicker();
+    closeTimePicker();
     el.modalOverlay.hidden = false;
     setTimeout(() => el.taskTitle.focus(), 50);
   }
   function closeModal() {
     el.modalOverlay.hidden = true;
+    closeDatePicker();
+    closeTimePicker();
   }
   el.addTaskBtn.addEventListener("click", openCreateModal);
   el.cancelTask.addEventListener("click", closeModal);
@@ -1276,12 +1720,6 @@
     if (viewMonth > 11) { viewMonth = 0; viewYear++; }
     renderCalendar();
   });
-  el.monthYearBtn.addEventListener("click", () => {
-    viewYear = today.getFullYear();
-    viewMonth = today.getMonth();
-    selectedDate = toDateKey(today);
-    renderAll();
-  });
   el.calendarToggle.addEventListener("click", () => {
     calendarOpen = !calendarOpen;
     el.calendarSection.style.display = calendarOpen ? "" : "none";
@@ -1307,6 +1745,7 @@
       if (!el.modalOverlay.hidden) closeModal();
       else if (!el.confirmOverlay.hidden) el.confirmOverlay.hidden = true;
       else if (!el.reportOverlay.hidden) closeReport();
+      else if (!el.dayDetailOverlay.hidden) closeDayDetail();
       else if (!el.moreMenu.hidden) closeMoreMenu();
       else if (!el.snackbar.hidden) hideSnackbar();
       return;
@@ -1435,6 +1874,8 @@
 
   // ---------- Init ----------
   initTheme();
+  populateMonthYearSelects();
   renderCategoryChips();
+  renderPriorityChips();
   renderAll();
 })();
