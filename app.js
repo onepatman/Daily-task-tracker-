@@ -666,7 +666,12 @@
   }
 
   // ---------- Inline subtask checklist (Day/Week views) ----------
-  function buildInlineSubtaskChecklist(task, wrapClass, rowClass) {
+  function syncTaskDoneFromSubtasks(task, dateKey) {
+    if (!task.subtasks || !task.subtasks.length) return;
+    setDoneOn(task, dateKey, task.subtasks.every((s) => s.done));
+  }
+
+  function buildInlineSubtaskChecklist(task, dateKey, wrapClass, rowClass) {
     const wrap = document.createElement("div");
     wrap.className = wrapClass;
     task.subtasks.forEach((s) => {
@@ -679,6 +684,7 @@
       cb.addEventListener("change", () => {
         s.done = cb.checked;
         row.classList.toggle("done", s.done);
+        syncTaskDoneFromSubtasks(task, dateKey);
         saveTasks();
         renderAll();
       });
@@ -801,7 +807,7 @@
       fill.style.width = pct + "%";
       bar.appendChild(fill);
       main.appendChild(bar);
-      main.appendChild(buildInlineSubtaskChecklist(task, "task-subtask-list", "task-subtask-row"));
+      main.appendChild(buildInlineSubtaskChecklist(task, dateKey, "task-subtask-list", "task-subtask-row"));
     }
 
     main.addEventListener("click", () => {
@@ -995,7 +1001,7 @@
           row.append(dot, ttl, time);
           list.appendChild(row);
           if (t.subtasks && t.subtasks.length) {
-            list.appendChild(buildInlineSubtaskChecklist(t, "week-task-subtasks", "week-task-subtask-row"));
+            list.appendChild(buildInlineSubtaskChecklist(t, key, "week-task-subtasks", "week-task-subtask-row"));
           }
         });
         if (dayTasks.length > 6) {
@@ -1045,7 +1051,7 @@
     el.dayDetailBody.innerHTML = "";
 
     if (dayDetailMode === "task") {
-      if (!dayDetailTask || !occursOn(dayDetailTask, dayDetailDateKey)) { closeDayDetail(); return; }
+      if (!dayDetailTask || !tasks.includes(dayDetailTask) || !occursOn(dayDetailTask, dayDetailDateKey)) { closeDayDetail(); return; }
       el.dayDetailTitle.textContent = dayDetailTask.title;
       el.dayDetailBody.appendChild(buildDayDetailCard(dayDetailTask, dayDetailDateKey));
       return;
@@ -1109,6 +1115,7 @@
         cb.checked = !!s.done;
         cb.addEventListener("change", () => {
           s.done = cb.checked;
+          syncTaskDoneFromSubtasks(task, dateKey);
           saveTasks();
           renderAll();
         });
