@@ -755,6 +755,13 @@
 
     const titleRow = document.createElement("div");
     titleRow.className = "task-title-row";
+    if (task.time) {
+      const timeInline = document.createElement("span");
+      timeInline.className = "task-time-inline";
+      timeInline.textContent = task.time;
+      if (!done && isDueSoon(dateKey, task.time)) timeInline.classList.add("due");
+      titleRow.appendChild(timeInline);
+    }
     const title = document.createElement("span");
     title.className = "task-title";
     title.textContent = task.title;
@@ -817,14 +824,6 @@
 
     const timeCol = document.createElement("div");
     timeCol.className = "task-time-col";
-
-    if (task.time) {
-      const time = document.createElement("span");
-      time.className = "task-time";
-      time.textContent = task.time;
-      if (!done && isDueSoon(dateKey, task.time)) time.classList.add("due");
-      timeCol.appendChild(time);
-    }
 
     const editBtn = document.createElement("button");
     editBtn.type = "button";
@@ -1008,10 +1007,14 @@
           const ttl = document.createElement("span");
           ttl.className = "week-task-title";
           ttl.textContent = t.title;
-          const time = document.createElement("span");
-          time.className = "week-task-time";
-          time.textContent = t.time || "";
-          row.append(dot, ttl, time);
+          if (t.time) {
+            const time = document.createElement("span");
+            time.className = "week-task-time";
+            time.textContent = t.time;
+            row.append(dot, time, ttl);
+          } else {
+            row.append(dot, ttl);
+          }
           list.appendChild(row);
           if (t.subtasks && t.subtasks.length) {
             list.appendChild(buildInlineSubtaskChecklist(t, key, "week-task-subtasks", "week-task-subtask-row"));
@@ -1089,16 +1092,16 @@
 
     const head = document.createElement("div");
     head.className = "day-detail-card-head";
-    const title = document.createElement("span");
-    title.className = "day-detail-card-title" + (done ? " done" : "");
-    title.textContent = task.title;
-    head.appendChild(title);
     if (task.time) {
       const time = document.createElement("span");
       time.className = "day-detail-card-time";
       time.textContent = task.time;
       head.appendChild(time);
     }
+    const title = document.createElement("span");
+    title.className = "day-detail-card-title" + (done ? " done" : "");
+    title.textContent = task.title;
+    head.appendChild(title);
     card.appendChild(head);
 
     const meta = document.createElement("div");
