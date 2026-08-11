@@ -49,6 +49,7 @@
         <div class="more-menu-wrap">
           <button id="moreMenuBtn" class="tb-icon-btn" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋮</button>
           <div class="more-menu" id="moreMenu" hidden>
+            <button type="button" id="menuSync">🔄 Sync across devices</button>
             <button type="button" id="menuWeeklyReview">📊 Weekly review</button>
             <button type="button" id="menuPrint">🖨 Print sheet</button>
             <button type="button" id="menuExportJson">⇩ Export JSON</button>
@@ -303,6 +304,16 @@
       <button type="button" id="closeReport" aria-label="Close">✕</button>
     </div>
     <div class="report-body" id="reportBody"></div>
+  </div>
+</div>
+
+<div class="report-overlay" id="syncOverlay" hidden>
+  <div class="report-box" role="dialog" aria-modal="true" aria-label="Sync across devices">
+    <div class="report-header">
+      <h2>🔄 Sync Across Devices</h2>
+      <button type="button" id="closeSyncOverlay" aria-label="Close">✕</button>
+    </div>
+    <div class="report-body" id="syncBody"></div>
   </div>
 </div>
 
