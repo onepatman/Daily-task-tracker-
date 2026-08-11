@@ -1,4 +1,4 @@
-const CACHE_NAME = "daily-log-v10";
+const CACHE_NAME = "daily-log-v11";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -6,7 +6,9 @@ const APP_SHELL = [
   "./app.js",
   "./manifest.json",
   "./icons/icon-192.png",
-  "./icons/icon-512.png"
+  "./icons/icon-512.png",
+  "./icons/logo-1024.png",
+  "./icons/banner.png"
 ];
 
 self.addEventListener("install", (event) => {

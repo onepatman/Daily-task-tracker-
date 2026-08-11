@@ -755,13 +755,6 @@
 
     const titleRow = document.createElement("div");
     titleRow.className = "task-title-row";
-    if (task.time) {
-      const timeInline = document.createElement("span");
-      timeInline.className = "task-time-inline";
-      timeInline.textContent = task.time;
-      if (!done && isDueSoon(dateKey, task.time)) timeInline.classList.add("due");
-      titleRow.appendChild(timeInline);
-    }
     const title = document.createElement("span");
     title.className = "task-title";
     title.textContent = task.title;
@@ -836,7 +829,22 @@
     });
     timeCol.appendChild(editBtn);
 
-    row.append(no, check, main, timeCol);
+    if (task.time) {
+      const timeRow = document.createElement("div");
+      timeRow.className = "task-time-row";
+      const timeInline = document.createElement("span");
+      timeInline.className = "task-time-inline";
+      timeInline.textContent = task.time;
+      if (!done && isDueSoon(dateKey, task.time)) timeInline.classList.add("due");
+      timeRow.appendChild(timeInline);
+      row.appendChild(timeRow);
+    }
+
+    const line = document.createElement("div");
+    line.className = "task-row-line";
+    line.append(no, check, main, timeCol);
+    row.appendChild(line);
+
     wrap.append(actions, row);
 
     attachSwipe(row, task, dateKey);
@@ -1608,7 +1616,10 @@
     el.tpClock.querySelectorAll(".tp-num").forEach((btn, i) => btn.classList.toggle("selected", i === idx));
     if (idx == null) { el.tpHand.style.opacity = "0"; return; }
     el.tpHand.style.opacity = "1";
-    el.tpHand.style.transform = `rotate(${(idx / 12) * 360}deg)`;
+    // .tp-clock-hand is drawn extending downward from the center pivot, so its
+    // unrotated (0deg) orientation already points at the 6 o'clock spot -- add
+    // 180deg so idx 0 (the 12 o'clock number) lines up with the hand pointing up.
+    el.tpHand.style.transform = `rotate(${(idx / 12) * 360 + 180}deg)`;
   }
   function selectClockValue(val) {
     if (tpMode === "hour") {
@@ -2030,4 +2041,12 @@
   renderCategoryChips();
   renderPriorityChips();
   renderAll();
+
+  const splash = document.getElementById("splashScreen");
+  if (splash) {
+    setTimeout(() => {
+      splash.classList.add("hide");
+      setTimeout(() => splash.remove(), 450);
+    }, 650);
+  }
 })();
