@@ -23,6 +23,17 @@
       </button>
       <div class="tb-nav-right">
         <button id="themeToggle" class="tb-icon-btn" aria-label="Toggle light/dark theme">🌙</button>
+        <div class="more-menu-wrap">
+          <button id="moreMenuBtn" class="tb-icon-btn" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋮</button>
+          <div class="more-menu" id="moreMenu" hidden>
+            <button type="button" id="menuWeeklyReview">📊 Weekly review</button>
+            <button type="button" id="menuPrint">🖨 Print sheet</button>
+            <button type="button" id="menuExportJson">⇩ Export JSON</button>
+            <button type="button" id="menuExportCsv">⇩ Export CSV</button>
+            <button type="button" id="menuImport">⇧ Import JSON</button>
+            <input type="file" id="importFileInput" accept="application/json" hidden />
+          </div>
+        </div>
         <button id="nextMonth" class="tb-arrow" aria-label="Next month">›</button>
       </div>
     </div>
@@ -41,6 +52,12 @@
       </div>
     </div>
   </header>
+
+  <div class="view-tabs" id="viewTabs" role="tablist" aria-label="View">
+    <button type="button" class="view-tab active" data-view="day" role="tab" aria-selected="true">Day</button>
+    <button type="button" class="view-tab" data-view="week" role="tab" aria-selected="false">Week</button>
+    <button type="button" class="view-tab" data-view="timeline" role="tab" aria-selected="false">Timeline</button>
+  </div>
 
   <div class="app-body">
     <aside class="app-sidebar">
@@ -77,10 +94,15 @@
     </aside>
 
     <div class="app-main">
+      <div class="print-header">
+        <h1>Daily Log</h1>
+        <p id="printDate"></p>
+      </div>
+
       <section class="toolbar" id="toolbar">
         <div class="toolbar-search">
           <span class="toolbar-search-icon">⌕</span>
-          <input type="search" id="searchInput" placeholder="Search tasks…" aria-label="Search tasks" />
+          <input type="search" id="searchInput" placeholder="Search tasks… (/)" aria-label="Search tasks" />
         </div>
         <div class="toolbar-row">
           <div class="chip-group" id="categoryChips" role="group" aria-label="Filter by category"></div>
@@ -94,7 +116,7 @@
         </div>
       </section>
 
-      <main class="punchlist">
+      <main class="punchlist" id="dayView">
         <div class="punchlist-header">
           <span class="col-no">NO.</span>
           <span class="col-check">✓</span>
@@ -104,6 +126,9 @@
         <div class="punchlist-body" id="taskList"></div>
         <p class="empty-state" id="emptyState">No items logged for this sheet.<br>Tap <strong>+ LOG ITEM</strong> to add one.</p>
       </main>
+
+      <div class="week-view" id="weekView" hidden></div>
+      <div class="timeline-view" id="timelineView" hidden></div>
     </div>
   </div>
 
@@ -114,15 +139,39 @@
 <div class="reminder-banner" id="reminderBanner" role="alert" hidden>
   <span class="reminder-icon">⏰</span>
   <span id="reminderText"></span>
+  <button id="snoozeReminder" class="btn-snooze">Snooze 10m</button>
   <button id="dismissReminder" aria-label="Dismiss reminder">✕</button>
+</div>
+
+<div class="snackbar" id="snackbar" hidden>
+  <span id="snackbarText"></span>
+  <button type="button" id="snackbarUndo">Undo</button>
 </div>
 
 <div class="modal-overlay" id="modalOverlay" hidden>
   <form class="modal" id="taskForm">
     <h2 id="modalTitle">Log Item</h2>
+
+    <div class="template-row" id="templateRow">
+      <select id="templateSelect" aria-label="Start from template">
+        <option value="">Start from template…</option>
+      </select>
+      <button type="button" id="saveTemplateBtn" class="btn-ghost btn-small" title="Save current form as a template">💾</button>
+      <button type="button" id="deleteTemplateBtn" class="btn-ghost btn-small" title="Delete selected template" hidden>🗑</button>
+    </div>
+
     <label>Task
       <input type="text" id="taskTitle" required maxlength="120" placeholder="e.g. Submit HVAC load calc" />
     </label>
+
+    <div class="field-row">
+      <label>Date
+        <input type="date" id="taskDate" />
+      </label>
+      <label>Time <span class="optional">(optional)</span>
+        <input type="time" id="taskTime" />
+      </label>
+    </div>
 
     <div class="field-row">
       <label>Category
@@ -144,19 +193,14 @@
       </label>
     </div>
 
-    <div class="field-row">
-      <label>Time <span class="optional">(optional)</span>
-        <input type="time" id="taskTime" />
-      </label>
-      <label>Repeat
-        <select id="taskRepeat">
-          <option value="none">Does not repeat</option>
-          <option value="daily">Daily</option>
-          <option value="weekdays">Weekdays (Mon–Fri)</option>
-          <option value="weekly">Weekly</option>
-        </select>
-      </label>
-    </div>
+    <label>Repeat
+      <select id="taskRepeat">
+        <option value="none">Does not repeat</option>
+        <option value="daily">Daily</option>
+        <option value="weekdays">Weekdays (Mon–Fri)</option>
+        <option value="weekly">Weekly</option>
+      </select>
+    </label>
 
     <label class="checkbox-row">
       <input type="checkbox" id="taskReminder" checked />
@@ -187,6 +231,16 @@
   <div class="confirm-box" role="alertdialog" aria-modal="true">
     <p id="confirmMessage">Are you sure?</p>
     <div class="confirm-actions" id="confirmActions"></div>
+  </div>
+</div>
+
+<div class="report-overlay" id="reportOverlay" hidden>
+  <div class="report-box" role="dialog" aria-modal="true" aria-label="Weekly review">
+    <div class="report-header">
+      <h2>Weekly Review</h2>
+      <button type="button" id="closeReport" aria-label="Close">✕</button>
+    </div>
+    <div class="report-body" id="reportBody"></div>
   </div>
 </div>
 

@@ -3,9 +3,10 @@
 
   const STORAGE_KEY = "dailyLog.tasks.v1";
   const THEME_KEY = "dailyLog.theme";
-  const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+  const TEMPLATES_KEY = "dailyLog.templates.v1";
   const MONTHS = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY",
     "AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
+  const DAY_NAMES = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
 
   const CATEGORIES = {
     work:     { label: "Work",     color: "var(--cat-work)" },
@@ -17,6 +18,7 @@
   };
   const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
   const RING_CIRCUMFERENCE = 2 * Math.PI * 27;
+  const SNOOZE_MS = 10 * 60000;
 
   // ---------- State ----------
   const today = new Date();
@@ -24,14 +26,20 @@
   let viewMonth = today.getMonth(); // 0-11
   let selectedDate = toDateKey(today);
   let tasks = loadTasks();
+  let templates = loadTemplates();
   let calendarOpen = true;
   let insightsOpen = false;
   let searchQuery = "";
   let activeCategories = new Set();
   let sortMode = "time";
+  let currentView = "day"; // 'day' | 'week' | 'timeline'
   let editingTask = null;
   let editingDateKey = null;
   let modalSubtasks = [];
+  let pendingUndo = null;
+  let snackbarTimer = null;
+  let activeReminderTask = null;
+  let activeReminderDateKey = null;
 
   // ---------- Elements ----------
   const el = {
@@ -41,6 +49,15 @@
     nextMonth: document.getElementById("nextMonth"),
     monthYearBtn: document.getElementById("monthYearBtn"),
     themeToggle: document.getElementById("themeToggle"),
+    moreMenuBtn: document.getElementById("moreMenuBtn"),
+    moreMenu: document.getElementById("moreMenu"),
+    menuWeeklyReview: document.getElementById("menuWeeklyReview"),
+    menuPrint: document.getElementById("menuPrint"),
+    menuExportJson: document.getElementById("menuExportJson"),
+    menuExportCsv: document.getElementById("menuExportCsv"),
+    menuImport: document.getElementById("menuImport"),
+    importFileInput: document.getElementById("importFileInput"),
+    viewTabs: document.getElementById("viewTabs"),
     calendarGrid: document.getElementById("calendarGrid"),
     calendarSection: document.getElementById("calendarSection"),
     calendarToggle: document.getElementById("calendarToggle"),
@@ -54,16 +71,25 @@
     categoryChips: document.getElementById("categoryChips"),
     sortSelect: document.getElementById("sortSelect"),
     punchlist: document.querySelector(".punchlist"),
+    dayView: document.getElementById("dayView"),
+    weekView: document.getElementById("weekView"),
+    timelineView: document.getElementById("timelineView"),
     sheetDate: document.getElementById("sheetDate"),
     sheetDay: document.getElementById("sheetDay"),
     sheetStatus: document.getElementById("sheetStatus"),
+    printDate: document.getElementById("printDate"),
     taskList: document.getElementById("taskList"),
     emptyState: document.getElementById("emptyState"),
     addTaskBtn: document.getElementById("addTaskBtn"),
     modalOverlay: document.getElementById("modalOverlay"),
     modalTitle: document.getElementById("modalTitle"),
     taskForm: document.getElementById("taskForm"),
+    templateRow: document.getElementById("templateRow"),
+    templateSelect: document.getElementById("templateSelect"),
+    saveTemplateBtn: document.getElementById("saveTemplateBtn"),
+    deleteTemplateBtn: document.getElementById("deleteTemplateBtn"),
     taskTitle: document.getElementById("taskTitle"),
+    taskDate: document.getElementById("taskDate"),
     taskCategory: document.getElementById("taskCategory"),
     taskPriority: document.getElementById("taskPriority"),
     taskTime: document.getElementById("taskTime"),
@@ -77,8 +103,15 @@
     confirmOverlay: document.getElementById("confirmOverlay"),
     confirmMessage: document.getElementById("confirmMessage"),
     confirmActions: document.getElementById("confirmActions"),
+    reportOverlay: document.getElementById("reportOverlay"),
+    reportBody: document.getElementById("reportBody"),
+    closeReport: document.getElementById("closeReport"),
+    snackbar: document.getElementById("snackbar"),
+    snackbarText: document.getElementById("snackbarText"),
+    snackbarUndo: document.getElementById("snackbarUndo"),
     reminderBanner: document.getElementById("reminderBanner"),
     reminderText: document.getElementById("reminderText"),
+    snoozeReminder: document.getElementById("snoozeReminder"),
     dismissReminder: document.getElementById("dismissReminder"),
     notifyPill: document.getElementById("notifyPill"),
     installBtn: document.getElementById("installBtn"),
@@ -94,6 +127,17 @@
   }
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  function getWeekStart(dateKey) {
+    const d = parseDateKey(dateKey);
+    d.setDate(d.getDate() - d.getDay());
+    return d;
+  }
+  function formatHour(h) {
+    const period = h >= 12 ? "PM" : "AM";
+    let hour12 = h % 12;
+    if (hour12 === 0) hour12 = 12;
+    return `${hour12}${period}`;
   }
 
   // ---------- Persistence & migration ----------
@@ -135,6 +179,22 @@
       console.error("Could not save tasks", e);
     }
   }
+  function loadTemplates() {
+    try {
+      const raw = localStorage.getItem(TEMPLATES_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error("Could not read templates", e);
+      return [];
+    }
+  }
+  function saveTemplates() {
+    try {
+      localStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates));
+    } catch (e) {
+      console.error("Could not save templates", e);
+    }
+  }
 
   // ---------- Occurrence logic (supports recurring tasks) ----------
   function matchesRepeat(task, dateObj) {
@@ -169,6 +229,18 @@
     if (task.repeat === "none") task.notified = true;
     else { task.notifiedDates = task.notifiedDates || {}; task.notifiedDates[dateKey] = true; }
   }
+  function clearNotifiedOn(task, dateKey) {
+    if (task.repeat === "none") task.notified = false;
+    else if (task.notifiedDates) delete task.notifiedDates[dateKey];
+  }
+  function getSnoozeUntil(task, dateKey) {
+    if (task.repeat === "none") return task.snoozeUntil || 0;
+    return (task.snoozeDates && task.snoozeDates[dateKey]) || 0;
+  }
+  function setSnoozeUntil(task, dateKey, ts) {
+    if (task.repeat === "none") task.snoozeUntil = ts;
+    else { task.snoozeDates = task.snoozeDates || {}; task.snoozeDates[dateKey] = ts; }
+  }
   function tasksForDate(dateKey) {
     return tasks.filter((t) => occursOn(t, dateKey));
   }
@@ -198,7 +270,15 @@
   function requestDelete(task, dateKey) {
     if (task.repeat === "none") {
       showConfirm(`Remove "${task.title}" from the sheet?`, [
-        { label: "Delete", danger: true, onClick: () => { tasks = tasks.filter((t) => t.id !== task.id); saveTasks(); renderAll(); } },
+        { label: "Delete", danger: true, onClick: () => {
+            const idx = tasks.indexOf(task);
+            tasks = tasks.filter((t) => t.id !== task.id);
+            saveTasks(); renderAll();
+            showSnackbar(`"${task.title}" deleted`, () => {
+              tasks.splice(Math.min(idx, tasks.length), 0, task);
+              saveTasks(); renderAll();
+            });
+          } },
         { label: "Cancel", cancel: true },
       ]);
     } else {
@@ -207,12 +287,41 @@
             task.skipped = task.skipped || {};
             task.skipped[dateKey] = true;
             saveTasks(); renderAll();
+            showSnackbar("Removed this occurrence", () => {
+              delete task.skipped[dateKey];
+              saveTasks(); renderAll();
+            });
           } },
-        { label: "Entire series", danger: true, onClick: () => { tasks = tasks.filter((t) => t.id !== task.id); saveTasks(); renderAll(); } },
+        { label: "Entire series", danger: true, onClick: () => {
+            tasks = tasks.filter((t) => t.id !== task.id);
+            saveTasks(); renderAll();
+            showSnackbar(`"${task.title}" series deleted`, () => {
+              tasks.push(task);
+              saveTasks(); renderAll();
+            });
+          } },
         { label: "Cancel", cancel: true },
       ]);
     }
   }
+
+  // ---------- Snackbar (undo) ----------
+  function showSnackbar(text, undoAction) {
+    clearTimeout(snackbarTimer);
+    el.snackbarText.textContent = text;
+    el.snackbarUndo.hidden = !undoAction;
+    pendingUndo = undoAction || null;
+    el.snackbar.hidden = false;
+    snackbarTimer = setTimeout(hideSnackbar, 5000);
+  }
+  function hideSnackbar() {
+    el.snackbar.hidden = true;
+    pendingUndo = null;
+  }
+  el.snackbarUndo.addEventListener("click", () => {
+    if (pendingUndo) pendingUndo();
+    hideSnackbar();
+  });
 
   // ---------- Theme ----------
   function applyTheme(theme) {
@@ -231,6 +340,45 @@
     localStorage.setItem(THEME_KEY, next);
     applyTheme(next);
   });
+
+  // ---------- More menu ----------
+  function openMoreMenu() {
+    el.moreMenu.hidden = false;
+    el.moreMenuBtn.setAttribute("aria-expanded", "true");
+  }
+  function closeMoreMenu() {
+    el.moreMenu.hidden = true;
+    el.moreMenuBtn.setAttribute("aria-expanded", "false");
+  }
+  el.moreMenuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (el.moreMenu.hidden) openMoreMenu(); else closeMoreMenu();
+  });
+  document.addEventListener("click", (e) => {
+    if (!el.moreMenu.hidden && !e.target.closest(".more-menu-wrap")) closeMoreMenu();
+  });
+
+  // ---------- View tabs (Day / Week / Timeline) ----------
+  function setView(view) {
+    currentView = view;
+    el.viewTabs.querySelectorAll(".view-tab").forEach((tab) => {
+      const active = tab.dataset.view === view;
+      tab.classList.toggle("active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    el.dayView.hidden = view !== "day";
+    el.weekView.hidden = view !== "week";
+    el.timelineView.hidden = view !== "timeline";
+    renderCurrentView();
+  }
+  el.viewTabs.querySelectorAll(".view-tab").forEach((tab) => {
+    tab.addEventListener("click", () => setView(tab.dataset.view));
+  });
+  function renderCurrentView() {
+    if (currentView === "week") renderWeekView();
+    else if (currentView === "timeline") renderTimelineView();
+    else renderSheet();
+  }
 
   // ---------- Calendar rendering ----------
   function renderCalendar() {
@@ -318,25 +466,32 @@
         if (activeCategories.has(key)) activeCategories.delete(key);
         else activeCategories.add(key);
         chip.classList.toggle("active");
-        renderSheet();
+        renderCurrentView();
       });
       el.categoryChips.appendChild(chip);
     });
   }
 
-  // ---------- Punch-list / sheet rendering ----------
-  function renderSheet() {
+  // ---------- Sheet header (date/day/status), shared across views ----------
+  function updateSheetHeader() {
     const dateObj = parseDateKey(selectedDate);
-    el.sheetDate.textContent =
+    const dateStr =
       String(dateObj.getMonth() + 1).padStart(2, "0") + "." +
       String(dateObj.getDate()).padStart(2, "0") + "." +
       dateObj.getFullYear();
-    el.sheetDay.textContent = ["SUN","MON","TUE","WED","THU","FRI","SAT"][dateObj.getDay()];
+    const dayStr = DAY_NAMES[dateObj.getDay()];
+    el.sheetDate.textContent = dateStr;
+    el.sheetDay.textContent = dayStr;
 
     const allDayTasks = tasksForDate(selectedDate);
     const doneCount = allDayTasks.filter((t) => isDoneOn(t, selectedDate)).length;
     el.sheetStatus.textContent = `${doneCount}/${allDayTasks.length} DONE`;
+    el.printDate.textContent = `${dayStr} · ${dateStr}`;
+  }
 
+  // ---------- Day view (punch-list) ----------
+  function renderSheet() {
+    const allDayTasks = tasksForDate(selectedDate);
     const visibleTasks = getVisibleTasks(selectedDate);
 
     el.taskList.innerHTML = "";
@@ -559,6 +714,153 @@
     renderAll();
   }
 
+  // ---------- Week view ----------
+  function renderWeekView() {
+    el.weekView.innerHTML = "";
+    const weekStart = getWeekStart(selectedDate);
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart);
+      d.setDate(d.getDate() + i);
+      const key = toDateKey(d);
+
+      const card = document.createElement("div");
+      card.className = "week-day-card" +
+        (key === toDateKey(today) ? " is-today" : "") +
+        (key === selectedDate ? " is-selected" : "");
+
+      const head = document.createElement("div");
+      head.className = "week-day-head";
+      const title = document.createElement("span");
+      title.className = "week-day-title";
+      title.textContent = `${DAY_NAMES[i]} ${d.getMonth() + 1}/${d.getDate()}`;
+      if (key === toDateKey(today)) {
+        const badge = document.createElement("span");
+        badge.className = "is-today-badge";
+        badge.textContent = "• TODAY";
+        title.appendChild(badge);
+      }
+      head.appendChild(title);
+
+      const dayTasks = getVisibleTasks(key).sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
+      const doneCount = dayTasks.filter((t) => isDoneOn(t, key)).length;
+      const count = document.createElement("span");
+      count.className = "week-day-count";
+      count.textContent = dayTasks.length ? `${doneCount}/${dayTasks.length}` : "";
+      head.appendChild(count);
+      card.appendChild(head);
+
+      const list = document.createElement("div");
+      list.className = "week-day-tasks";
+      if (dayTasks.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "week-day-empty";
+        empty.textContent = "No tasks";
+        list.appendChild(empty);
+      } else {
+        dayTasks.slice(0, 6).forEach((t) => {
+          const row = document.createElement("div");
+          row.className = "week-task-row" + (isDoneOn(t, key) ? " done" : "");
+          const dot = document.createElement("span");
+          dot.className = "week-task-cat-dot";
+          dot.style.background = (CATEGORIES[t.category] || CATEGORIES.other).color;
+          const ttl = document.createElement("span");
+          ttl.className = "week-task-title";
+          ttl.textContent = t.title;
+          const time = document.createElement("span");
+          time.className = "week-task-time";
+          time.textContent = t.time || "";
+          row.append(dot, ttl, time);
+          row.addEventListener("click", (e) => { e.stopPropagation(); openEditModal(t, key); });
+          list.appendChild(row);
+        });
+        if (dayTasks.length > 6) {
+          const more = document.createElement("div");
+          more.className = "week-day-empty";
+          more.textContent = `+${dayTasks.length - 6} more`;
+          list.appendChild(more);
+        }
+      }
+      card.appendChild(list);
+
+      card.addEventListener("click", () => {
+        selectedDate = key;
+        setView("day");
+        renderCalendar();
+      });
+      el.weekView.appendChild(card);
+    }
+  }
+
+  // ---------- Timeline view ----------
+  function renderTimelineView() {
+    el.timelineView.innerHTML = "";
+    const dayTasks = getVisibleTasks(selectedDate);
+    const timed = dayTasks.filter((t) => t.time);
+    const untimed = dayTasks.filter((t) => !t.time);
+
+    const byHour = {};
+    timed.forEach((t) => {
+      const h = parseInt(t.time.split(":")[0], 10);
+      (byHour[h] = byHour[h] || []).push(t);
+    });
+
+    let startHour = 6, endHour = 21;
+    Object.keys(byHour).map(Number).forEach((h) => {
+      if (h < startHour) startHour = h;
+      if (h > endHour) endHour = h;
+    });
+
+    for (let h = startHour; h <= endHour; h++) {
+      const row = document.createElement("div");
+      row.className = "timeline-row";
+      const label = document.createElement("div");
+      label.className = "timeline-hour-label";
+      label.textContent = formatHour(h);
+      const slot = document.createElement("div");
+      slot.className = "timeline-slot";
+      (byHour[h] || []).sort((a, b) => a.time.localeCompare(b.time)).forEach((t) => {
+        slot.appendChild(buildTimelineTask(t, true));
+      });
+      row.append(label, slot);
+      el.timelineView.appendChild(row);
+    }
+
+    if (untimed.length) {
+      const box = document.createElement("div");
+      box.className = "timeline-unscheduled";
+      const strong = document.createElement("strong");
+      strong.textContent = "UNSCHEDULED";
+      box.appendChild(strong);
+      untimed.forEach((t) => box.appendChild(buildTimelineTask(t, false)));
+      el.timelineView.appendChild(box);
+    }
+
+    if (dayTasks.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "timeline-unscheduled";
+      empty.textContent = "No tasks logged for this day.";
+      el.timelineView.appendChild(empty);
+    }
+  }
+  function buildTimelineTask(t, showTime) {
+    const done = isDoneOn(t, selectedDate);
+    const item = document.createElement("div");
+    item.className = "timeline-task cat-" + (CATEGORIES[t.category] ? t.category : "other") + (done ? " done" : "");
+    if (showTime) {
+      const time = document.createElement("span");
+      time.className = "timeline-task-time";
+      time.textContent = t.time;
+      item.appendChild(time);
+    }
+    const ttl = document.createElement("span");
+    ttl.className = "timeline-task-title";
+    ttl.textContent = t.title;
+    item.appendChild(ttl);
+    item.addEventListener("click", () => openEditModal(t, selectedDate));
+    return item;
+  }
+
   // ---------- Insights ----------
   function computeStreak() {
     const todayKey = toDateKey(today);
@@ -613,18 +915,183 @@
 
   function renderAll() {
     renderCalendar();
-    renderSheet();
+    updateSheetHeader();
+    renderCurrentView();
     updateInsights();
   }
+
+  // ---------- Weekly review report ----------
+  function reportStat(value, label) {
+    const box = document.createElement("div");
+    box.className = "report-stat";
+    const v = document.createElement("span"); v.className = "report-stat-value"; v.textContent = value;
+    const l = document.createElement("span"); l.className = "report-stat-label"; l.textContent = label;
+    box.append(v, l);
+    return box;
+  }
+  function renderReport() {
+    el.reportBody.innerHTML = "";
+
+    const weekStart = getWeekStart(toDateKey(today));
+    let weekTotal = 0, weekDone = 0;
+    const catCounts = {};
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart); d.setDate(d.getDate() + i);
+      const key = toDateKey(d);
+      tasksForDate(key).forEach((t) => {
+        weekTotal++;
+        if (isDoneOn(t, key)) weekDone++;
+        catCounts[t.category] = (catCounts[t.category] || 0) + 1;
+      });
+    }
+    const weekPct = weekTotal ? Math.round((weekDone / weekTotal) * 100) : 0;
+
+    const statsGrid = document.createElement("div");
+    statsGrid.className = "report-stats-grid";
+    statsGrid.appendChild(reportStat(`${weekDone}/${weekTotal}`, "Tasks this week"));
+    statsGrid.appendChild(reportStat(`${weekPct}%`, "Completion rate"));
+    el.reportBody.appendChild(statsGrid);
+
+    const trendTitle = document.createElement("p");
+    trendTitle.className = "report-section-title";
+    trendTitle.textContent = "30-day trend";
+    el.reportBody.appendChild(trendTitle);
+
+    const trend = document.createElement("div");
+    trend.className = "report-trend";
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today); d.setDate(d.getDate() - i);
+      const key = toDateKey(d);
+      const list = tasksForDate(key);
+      const done = list.filter((t) => isDoneOn(t, key)).length;
+      const pct = list.length ? Math.round((done / list.length) * 100) : 0;
+      const bar = document.createElement("div");
+      bar.className = "spark-bar";
+      bar.title = `${key}: ${pct}%`;
+      const fill = document.createElement("span");
+      fill.style.height = Math.max(pct, list.length ? 4 : 0) + "%";
+      bar.appendChild(fill);
+      trend.appendChild(bar);
+    }
+    el.reportBody.appendChild(trend);
+
+    const catTitle = document.createElement("p");
+    catTitle.className = "report-section-title";
+    catTitle.textContent = "Busiest categories this week";
+    el.reportBody.appendChild(catTitle);
+
+    const catEntries = Object.entries(catCounts).sort((a, b) => b[1] - a[1]);
+    if (catEntries.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "report-empty";
+      empty.textContent = "No tasks logged this week yet.";
+      el.reportBody.appendChild(empty);
+    } else {
+      const list = document.createElement("div");
+      list.className = "report-cat-list";
+      catEntries.forEach(([cat, count]) => {
+        const info = CATEGORIES[cat] || CATEGORIES.other;
+        const row = document.createElement("div");
+        row.className = "report-cat-row";
+        const dot = document.createElement("span");
+        dot.className = "chip-dot";
+        dot.style.background = info.color;
+        const name = document.createElement("span");
+        name.className = "report-cat-name";
+        name.textContent = info.label;
+        const cnt = document.createElement("span");
+        cnt.className = "report-cat-count";
+        cnt.textContent = String(count);
+        row.append(dot, name, cnt);
+        list.appendChild(row);
+      });
+      el.reportBody.appendChild(list);
+    }
+  }
+  function openReport() {
+    renderReport();
+    el.reportOverlay.hidden = false;
+  }
+  function closeReport() {
+    el.reportOverlay.hidden = true;
+  }
+  el.closeReport.addEventListener("click", closeReport);
+  el.reportOverlay.addEventListener("click", (e) => { if (e.target === el.reportOverlay) closeReport(); });
+  el.menuWeeklyReview.addEventListener("click", () => { closeMoreMenu(); openReport(); });
+
+  // ---------- Print ----------
+  el.menuPrint.addEventListener("click", () => {
+    closeMoreMenu();
+    if (currentView !== "day") setView("day");
+    window.print();
+  });
+
+  // ---------- Export / Import ----------
+  function downloadBlob(filename, content, mime) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function csvEscape(val) {
+    const s = String(val == null ? "" : val);
+    if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  el.menuExportJson.addEventListener("click", () => {
+    closeMoreMenu();
+    downloadBlob(`daily-log-export-${toDateKey(today)}.json`, JSON.stringify(tasks, null, 2), "application/json");
+  });
+  el.menuExportCsv.addEventListener("click", () => {
+    closeMoreMenu();
+    const headers = ["title", "category", "priority", "date", "time", "repeat", "done", "notes"];
+    const rows = tasks.map((t) => [
+      t.title, t.category, t.priority, t.startDate, t.time,
+      t.repeat, t.repeat === "none" ? t.done : "", t.notes || "",
+    ].map(csvEscape).join(","));
+    const csv = [headers.join(","), ...rows].join("\n");
+    downloadBlob(`daily-log-export-${toDateKey(today)}.csv`, csv, "text/csv");
+  });
+  el.menuImport.addEventListener("click", () => {
+    closeMoreMenu();
+    el.importFileInput.click();
+  });
+  el.importFileInput.addEventListener("change", () => {
+    const file = el.importFileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const imported = JSON.parse(String(reader.result));
+        if (!Array.isArray(imported)) throw new Error("Invalid file");
+        const existingIds = new Set(tasks.map((t) => t.id));
+        const migrated = imported.map(migrateTask);
+        const toAdd = migrated.filter((t) => !existingIds.has(t.id));
+        tasks = tasks.concat(toAdd);
+        saveTasks();
+        renderAll();
+        showSnackbar(`Imported ${toAdd.length} task(s)`);
+      } catch (e) {
+        showSnackbar("Import failed — invalid file");
+      }
+    };
+    reader.readAsText(file);
+    el.importFileInput.value = "";
+  });
 
   // ---------- Toolbar ----------
   el.searchInput.addEventListener("input", () => {
     searchQuery = el.searchInput.value;
-    renderSheet();
+    renderCurrentView();
   });
   el.sortSelect.addEventListener("change", () => {
     sortMode = el.sortSelect.value;
-    renderSheet();
+    renderCurrentView();
   });
 
   // ---------- Subtasks (modal) ----------
@@ -661,6 +1128,62 @@
     if (e.key === "Enter") { e.preventDefault(); addSubtaskFromInput(); }
   });
 
+  // ---------- Templates (modal) ----------
+  function renderTemplateOptions() {
+    el.templateSelect.innerHTML = '<option value="">Start from template…</option>';
+    templates.forEach((t) => {
+      const opt = document.createElement("option");
+      opt.value = t.id;
+      opt.textContent = t.title;
+      el.templateSelect.appendChild(opt);
+    });
+  }
+  el.templateSelect.addEventListener("change", () => {
+    const id = el.templateSelect.value;
+    el.deleteTemplateBtn.hidden = !id;
+    if (!id) return;
+    const tpl = templates.find((t) => t.id === id);
+    if (!tpl) return;
+    el.taskTitle.value = tpl.title;
+    el.taskCategory.value = tpl.category;
+    el.taskPriority.value = tpl.priority;
+    el.taskTime.value = tpl.time || "";
+    el.taskRepeat.value = tpl.repeat || "none";
+    el.taskReminder.checked = tpl.reminder !== false;
+    el.taskNotes.value = tpl.notes || "";
+    modalSubtasks = (tpl.subtasks || []).map((s) => ({ id: uid(), title: s.title, done: false }));
+    renderSubtaskList();
+  });
+  el.saveTemplateBtn.addEventListener("click", () => {
+    const title = el.taskTitle.value.trim();
+    if (!title) { el.taskTitle.focus(); return; }
+    const tpl = {
+      id: uid(),
+      title,
+      category: el.taskCategory.value,
+      priority: el.taskPriority.value,
+      time: el.taskTime.value || "",
+      repeat: el.taskRepeat.value,
+      reminder: el.taskReminder.checked,
+      notes: el.taskNotes.value.trim(),
+      subtasks: modalSubtasks.map((s) => ({ title: s.title })),
+    };
+    templates.push(tpl);
+    saveTemplates();
+    renderTemplateOptions();
+    el.templateSelect.value = tpl.id;
+    el.deleteTemplateBtn.hidden = false;
+    showSnackbar(`Template "${title}" saved`);
+  });
+  el.deleteTemplateBtn.addEventListener("click", () => {
+    const id = el.templateSelect.value;
+    if (!id) return;
+    templates = templates.filter((t) => t.id !== id);
+    saveTemplates();
+    renderTemplateOptions();
+    el.deleteTemplateBtn.hidden = true;
+  });
+
   // ---------- Modal ----------
   function openCreateModal() {
     editingTask = null;
@@ -669,10 +1192,15 @@
     modalSubtasks = [];
     renderSubtaskList();
     el.modalTitle.textContent = "Log Item";
+    el.taskDate.value = selectedDate;
     el.taskCategory.value = "work";
     el.taskPriority.value = "medium";
     el.taskRepeat.value = "none";
     el.taskReminder.checked = true;
+    el.templateRow.hidden = false;
+    renderTemplateOptions();
+    el.templateSelect.value = "";
+    el.deleteTemplateBtn.hidden = true;
     el.modalOverlay.hidden = false;
     setTimeout(() => el.taskTitle.focus(), 50);
   }
@@ -680,6 +1208,7 @@
     editingTask = task;
     editingDateKey = dateKey;
     el.taskTitle.value = task.title;
+    el.taskDate.value = task.startDate;
     el.taskCategory.value = task.category;
     el.taskPriority.value = task.priority;
     el.taskTime.value = task.time || "";
@@ -689,6 +1218,7 @@
     modalSubtasks = (task.subtasks || []).map((s) => ({ ...s }));
     renderSubtaskList();
     el.modalTitle.textContent = "Edit Item";
+    el.templateRow.hidden = true;
     el.modalOverlay.hidden = false;
     setTimeout(() => el.taskTitle.focus(), 50);
   }
@@ -704,6 +1234,7 @@
     e.preventDefault();
     const title = el.taskTitle.value.trim();
     if (!title) return;
+    const startDate = el.taskDate.value || selectedDate;
     const category = el.taskCategory.value;
     const priority = el.taskPriority.value;
     const time = el.taskTime.value || "";
@@ -713,13 +1244,13 @@
     const subtasks = modalSubtasks.map((s) => ({ id: s.id, title: s.title, done: !!s.done }));
 
     if (editingTask) {
-      Object.assign(editingTask, { title, category, priority, time, reminder, notes, repeat, subtasks });
+      Object.assign(editingTask, { title, category, priority, time, reminder, notes, repeat, subtasks, startDate });
     } else {
       tasks.push({
         id: uid(),
         title, category, priority, time, reminder, notes, subtasks,
         repeat,
-        startDate: selectedDate,
+        startDate,
         done: false,
         notified: false,
         completions: {},
@@ -727,6 +1258,7 @@
         skipped: {},
         order: Date.now(),
       });
+      selectedDate = startDate;
     }
     saveTasks();
     closeModal();
@@ -761,6 +1293,34 @@
     el.insightsToggle.textContent = insightsOpen ? "Hide insights ▲" : "Show insights ▾";
   });
 
+  // ---------- Keyboard shortcuts ----------
+  function shiftSelectedDate(deltaDays) {
+    const d = parseDateKey(selectedDate);
+    d.setDate(d.getDate() + deltaDays);
+    selectedDate = toDateKey(d);
+    viewYear = d.getFullYear();
+    viewMonth = d.getMonth();
+    renderAll();
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (!el.modalOverlay.hidden) closeModal();
+      else if (!el.confirmOverlay.hidden) el.confirmOverlay.hidden = true;
+      else if (!el.reportOverlay.hidden) closeReport();
+      else if (!el.moreMenu.hidden) closeMoreMenu();
+      else if (!el.snackbar.hidden) hideSnackbar();
+      return;
+    }
+    if (!el.modalOverlay.hidden || !el.confirmOverlay.hidden || !el.reportOverlay.hidden) return;
+    const tag = (e.target.tagName || "").toLowerCase();
+    const typing = tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable;
+    if (typing) return;
+    if (e.key === "n" || e.key === "N") { e.preventDefault(); openCreateModal(); }
+    else if (e.key === "/") { e.preventDefault(); el.searchInput.focus(); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); shiftSelectedDate(currentView === "week" ? -7 : -1); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); shiftSelectedDate(currentView === "week" ? 7 : 1); }
+  });
+
   // ---------- Reminders / alarm ----------
   let audioCtx = null;
   function beep() {
@@ -787,11 +1347,21 @@
     }
   }
 
-  function showReminderBanner(text) {
+  function showReminderBanner(text, task, dateKey) {
     el.reminderText.textContent = text;
+    activeReminderTask = task;
+    activeReminderDateKey = dateKey;
     el.reminderBanner.hidden = false;
   }
   el.dismissReminder.addEventListener("click", () => { el.reminderBanner.hidden = true; });
+  el.snoozeReminder.addEventListener("click", () => {
+    if (activeReminderTask) {
+      setSnoozeUntil(activeReminderTask, activeReminderDateKey, Date.now() + SNOOZE_MS);
+      clearNotifiedOn(activeReminderTask, activeReminderDateKey);
+      saveTasks();
+    }
+    el.reminderBanner.hidden = true;
+  });
 
   function checkReminders() {
     const now = new Date();
@@ -804,18 +1374,20 @@
       if (!occursOn(t, nowKey)) return;
       if (isDoneOn(t, nowKey)) return;
       if (isNotifiedOn(t, nowKey)) return;
+      const snoozeUntil = getSnoozeUntil(t, nowKey);
+      if (snoozeUntil && Date.now() < snoozeUntil) return;
       const [h, m] = t.time.split(":").map(Number);
       if (h * 60 + m <= nowMin) {
         setNotifiedOn(t, nowKey);
         changed = true;
         beep();
-        showReminderBanner(`${t.title} — ${t.time}`);
+        showReminderBanner(`${t.title} — ${t.time}`, t, nowKey);
         if ("Notification" in window && Notification.permission === "granted") {
           try {
             new Notification("Daily Log reminder", { body: t.title, tag: t.id + nowKey });
           } catch (e) { console.warn("Notification failed", e); }
         }
-        if (nowKey === selectedDate) renderSheet();
+        if (nowKey === selectedDate) renderCurrentView();
       }
     });
     if (changed) saveTasks();
