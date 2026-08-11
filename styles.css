@@ -1370,6 +1370,65 @@ html, body {
 .report-cat-row .report-cat-count { font-family: var(--font-mono); color: var(--text-faint); font-size: 12px; }
 .report-empty { font-size: 13px; color: var(--text-faint); text-align: center; padding: 12px 0; }
 
+/* ---------- Sync across devices ---------- */
+.sync-intro, .sync-hint {
+  font-size: 13px;
+  color: var(--text-soft);
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+.sync-start-btn { width: 100%; }
+.sync-divider {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-faint);
+  margin: 16px 0;
+}
+.sync-join-row { display: flex; gap: 8px; }
+.sync-code-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.sync-status-line {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.sync-status-synced { color: var(--green); }
+.sync-status-connecting { color: var(--text-faint); }
+.sync-status-error { color: var(--red); }
+.sync-code-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.sync-code-text {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+.sync-error { font-size: 12px; color: var(--red); margin: 0 0 12px; }
+.sync-off-btn { width: 100%; margin-top: 4px; }
+
 /* ---------- Day detail popup (Week view) ---------- */
 .day-detail-overlay {
   position: fixed; inset: 0;

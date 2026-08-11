@@ -69,6 +69,10 @@
     themeToggle: document.getElementById("themeToggle"),
     moreMenuBtn: document.getElementById("moreMenuBtn"),
     moreMenu: document.getElementById("moreMenu"),
+    menuSync: document.getElementById("menuSync"),
+    syncOverlay: document.getElementById("syncOverlay"),
+    syncBody: document.getElementById("syncBody"),
+    closeSyncOverlay: document.getElementById("closeSyncOverlay"),
     menuWeeklyReview: document.getElementById("menuWeeklyReview"),
     menuPrint: document.getElementById("menuPrint"),
     menuExportJson: document.getElementById("menuExportJson"),
@@ -229,6 +233,7 @@
     } catch (e) {
       console.error("Could not save tasks", e);
     }
+    pushSyncUpdate();
   }
   function loadTemplates() {
     try {
@@ -245,6 +250,7 @@
     } catch (e) {
       console.error("Could not save templates", e);
     }
+    pushSyncUpdate();
   }
 
   // ---------- Occurrence logic (supports recurring tasks) ----------
@@ -418,6 +424,7 @@
     if (!el.modalOverlay.hidden) { closeModal(); return true; }
     if (!el.confirmOverlay.hidden) { closeConfirm(); return true; }
     if (!el.reportOverlay.hidden) { closeReport(); return true; }
+    if (!el.syncOverlay.hidden) { closeSyncOverlay(); return true; }
     if (!el.dayDetailOverlay.hidden) { closeDayDetail(); return true; }
     if (!el.moreMenu.hidden) { closeMoreMenu(); return true; }
     return false;
@@ -1407,6 +1414,289 @@
   el.reportOverlay.addEventListener("click", (e) => { if (e.target === el.reportOverlay) closeReport(); });
   el.menuWeeklyReview.addEventListener("click", () => { closeMoreMenu(); openReport(); });
 
+  // ---------- Cloud sync (Firebase) ----------
+  // A lightweight "sync code" scheme: no login screen, no password. The first
+  // device generates a short random code and writes the whole tasks/templates
+  // state to a Firestore doc keyed by that code; any other device that enters
+  // the same code reads that doc and subscribes to live updates. Everyone is
+  // signed in anonymously purely so Firestore security rules can require
+  // request.auth != null -- the code itself (not the anonymous uid) is what
+  // scopes access to a given user's data. Conflict handling is last-write-wins
+  // (single person, a couple of their own devices -- no real concurrent-edit
+  // case to design for).
+  const SYNC_CODE_KEY = "dailyLog.syncCode";
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDeRFnHtlHDJmGNMvJ2I9E7D4gly57_ca8",
+    authDomain: "daily-task-tracker-2482e.firebaseapp.com",
+    projectId: "daily-task-tracker-2482e",
+    storageBucket: "daily-task-tracker-2482e.firebasestorage.app",
+    messagingSenderId: "211591838053",
+    appId: "1:211591838053:web:c99882880bc82f7fff498c",
+  };
+  let syncCode = localStorage.getItem(SYNC_CODE_KEY) || null;
+  let syncStatus = "off"; // 'off' | 'connecting' | 'synced' | 'error'
+  let syncError = "";
+  let fbApi = null;
+  let syncDb = null;
+  let syncUnsub = null;
+  let syncReadyPromise = null;
+  let applyingRemoteUpdate = false;
+  let pushDebounceTimer = null;
+  let lastPushedAt = null;
+
+  function ensureFirebase() {
+    if (syncReadyPromise) return syncReadyPromise;
+    syncReadyPromise = (async () => {
+      const [appMod, authMod, fsMod] = await Promise.all([
+        import("https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js"),
+        import("https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js"),
+        import("https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js"),
+      ]);
+      fbApi = { ...appMod, ...authMod, ...fsMod };
+      const app = fbApi.initializeApp(FIREBASE_CONFIG);
+      const auth = fbApi.getAuth(app);
+      syncDb = fbApi.getFirestore(app);
+      try { await fbApi.enableIndexedDbPersistence(syncDb); } catch (e) { /* multi-tab or unsupported -- fine without it */ }
+      await new Promise((resolve, reject) => {
+        const unsub = fbApi.onAuthStateChanged(auth, (user) => {
+          if (user) { unsub(); resolve(user); }
+        }, reject);
+        fbApi.signInAnonymously(auth).catch(reject);
+      });
+    })();
+    return syncReadyPromise;
+  }
+
+  function generateSyncCode() {
+    const chars = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"; // no 0/O/1/I/L -- easy to read aloud/retype
+    const group = () => Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+    return `${group()}-${group()}`;
+  }
+  function syncDocRef(code) {
+    return fbApi.doc(syncDb, "syncGroups", code);
+  }
+
+  async function startNewSync() {
+    syncStatus = "connecting"; syncError = ""; renderSyncBody();
+    try {
+      await ensureFirebase();
+      const code = generateSyncCode();
+      lastPushedAt = Date.now();
+      await fbApi.setDoc(syncDocRef(code), {
+        tasks, templates,
+        updatedAt: fbApi.serverTimestamp(),
+        updatedAtLocal: lastPushedAt,
+      });
+      syncCode = code;
+      localStorage.setItem(SYNC_CODE_KEY, code);
+      subscribeSync();
+    } catch (e) {
+      console.error("startNewSync failed", e);
+      syncStatus = "error"; syncError = "Hindi nagawa yung sync code. Subukan ulit.";
+      renderSyncBody();
+    }
+  }
+
+  async function joinSync(rawCode) {
+    const code = rawCode.trim().toUpperCase();
+    if (!code) return;
+    syncStatus = "connecting"; syncError = ""; renderSyncBody();
+    try {
+      await ensureFirebase();
+      const snap = await fbApi.getDoc(syncDocRef(code));
+      if (!snap.exists()) {
+        syncStatus = "off"; syncError = "Hindi nahanap yung code. Siguraduhing tama yung pagka-type.";
+        renderSyncBody();
+        return;
+      }
+      const data = snap.data();
+      applyingRemoteUpdate = true;
+      tasks = (data.tasks || []).map(migrateTask);
+      templates = data.templates || [];
+      saveLocalOnly();
+      applyingRemoteUpdate = false;
+      syncCode = code;
+      localStorage.setItem(SYNC_CODE_KEY, code);
+      subscribeSync();
+      renderAll();
+    } catch (e) {
+      console.error("joinSync failed", e);
+      syncStatus = "error"; syncError = "Hindi makaconnect. Subukan ulit.";
+      renderSyncBody();
+    }
+  }
+
+  function saveLocalOnly() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      localStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates));
+    } catch (e) { console.error("Could not save synced data locally", e); }
+  }
+
+  function subscribeSync() {
+    if (syncUnsub) { syncUnsub(); syncUnsub = null; }
+    syncUnsub = fbApi.onSnapshot(syncDocRef(syncCode), (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (data.updatedAtLocal === lastPushedAt) { syncStatus = "synced"; renderSyncBody(); return; }
+      applyingRemoteUpdate = true;
+      tasks = (data.tasks || []).map(migrateTask);
+      templates = data.templates || [];
+      saveLocalOnly();
+      applyingRemoteUpdate = false;
+      renderAll();
+      syncStatus = "synced";
+      renderSyncBody();
+    }, (err) => {
+      console.error("sync snapshot error", err);
+      syncStatus = "error"; syncError = "Nawala yung connection sa sync.";
+      renderSyncBody();
+    });
+    syncStatus = "synced";
+    renderSyncBody();
+  }
+
+  function pushSyncUpdate() {
+    if (!syncCode || applyingRemoteUpdate) return;
+    ensureFirebase().then(() => {
+      clearTimeout(pushDebounceTimer);
+      pushDebounceTimer = setTimeout(async () => {
+        try {
+          lastPushedAt = Date.now();
+          await fbApi.setDoc(syncDocRef(syncCode), {
+            tasks, templates,
+            updatedAt: fbApi.serverTimestamp(),
+            updatedAtLocal: lastPushedAt,
+          });
+        } catch (e) {
+          console.error("sync push failed", e);
+          syncStatus = "error"; syncError = "Hindi na-save yung huling changes sa cloud.";
+          renderSyncBody();
+        }
+      }, 700);
+    }).catch((e) => console.error("sync push init failed", e));
+  }
+
+  function disableSync() {
+    if (syncUnsub) { syncUnsub(); syncUnsub = null; }
+    syncCode = null;
+    localStorage.removeItem(SYNC_CODE_KEY);
+    syncStatus = "off"; syncError = "";
+    renderSyncBody();
+  }
+
+  function openSyncOverlay() {
+    el.syncOverlay.hidden = false;
+    pushOverlayState();
+    renderSyncBody();
+  }
+  function closeSyncOverlay() {
+    el.syncOverlay.hidden = true;
+  }
+
+  function renderSyncBody() {
+    if (el.syncOverlay.hidden) return;
+    const body = el.syncBody;
+    body.innerHTML = "";
+
+    if (syncCode) {
+      const statusLine = document.createElement("p");
+      statusLine.className = "sync-status-line sync-status-" + syncStatus;
+      statusLine.textContent = syncStatus === "synced" ? "✅ Naka-sync"
+        : syncStatus === "connecting" ? "⏳ Kumokonekta..."
+        : "⚠️ May problema sa connection";
+      body.appendChild(statusLine);
+
+      const codeBox = document.createElement("div");
+      codeBox.className = "sync-code-box";
+      const codeText = document.createElement("span");
+      codeText.className = "sync-code-text";
+      codeText.textContent = syncCode;
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.className = "btn-ghost btn-small";
+      copyBtn.textContent = "Copy";
+      copyBtn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(syncCode);
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => { copyBtn.textContent = "Copy"; }, 1500);
+        } catch (e) { /* clipboard unavailable -- ignore */ }
+      });
+      codeBox.append(codeText, copyBtn);
+      body.appendChild(codeBox);
+
+      const hint = document.createElement("p");
+      hint.className = "sync-hint";
+      hint.textContent = "I-type mo itong code sa ibang device mo para mag-connect sila sa parehong task list.";
+      body.appendChild(hint);
+
+      if (syncError) {
+        const err = document.createElement("p");
+        err.className = "sync-error";
+        err.textContent = syncError;
+        body.appendChild(err);
+      }
+
+      const offBtn = document.createElement("button");
+      offBtn.type = "button";
+      offBtn.className = "btn-ghost sync-off-btn";
+      offBtn.textContent = "I-off ang sync sa device na ito";
+      offBtn.addEventListener("click", disableSync);
+      body.appendChild(offBtn);
+      return;
+    }
+
+    const intro = document.createElement("p");
+    intro.className = "sync-intro";
+    intro.textContent = "I-sync yung tasks mo sa lahat ng device mo (phone, laptop) gamit ang isang simpleng code.";
+    body.appendChild(intro);
+
+    const startBtn = document.createElement("button");
+    startBtn.type = "button";
+    startBtn.className = "btn-solid sync-start-btn";
+    startBtn.textContent = "Gumawa ng bagong sync code";
+    startBtn.addEventListener("click", startNewSync);
+    body.appendChild(startBtn);
+
+    const divider = document.createElement("p");
+    divider.className = "sync-divider";
+    divider.textContent = "— o kung may code ka na —";
+    body.appendChild(divider);
+
+    const joinRow = document.createElement("div");
+    joinRow.className = "sync-join-row";
+    const codeInput = document.createElement("input");
+    codeInput.type = "text";
+    codeInput.placeholder = "hal. XPQR-7K4M";
+    codeInput.className = "sync-code-input";
+    codeInput.maxLength = 9;
+    const joinBtn = document.createElement("button");
+    joinBtn.type = "button";
+    joinBtn.className = "btn-ghost";
+    joinBtn.textContent = "Connect";
+    joinBtn.addEventListener("click", () => joinSync(codeInput.value));
+    codeInput.addEventListener("keydown", (e) => { if (e.key === "Enter") joinSync(codeInput.value); });
+    joinRow.append(codeInput, joinBtn);
+    body.appendChild(joinRow);
+
+    if (syncError) {
+      const err = document.createElement("p");
+      err.className = "sync-error";
+      err.textContent = syncError;
+      body.appendChild(err);
+    }
+  }
+
+  el.menuSync.addEventListener("click", () => { closeMoreMenu(); openSyncOverlay(); });
+  el.closeSyncOverlay.addEventListener("click", closeSyncOverlay);
+  el.syncOverlay.addEventListener("click", (e) => { if (e.target === el.syncOverlay) closeSyncOverlay(); });
+
+  // Silently resume a previously-connected sync on load, without popping the overlay open.
+  if (syncCode) {
+    ensureFirebase().then(subscribeSync).catch((e) => console.error("auto sync resume failed", e));
+  }
+
   // ---------- Print ----------
   el.menuPrint.addEventListener("click", () => {
     closeMoreMenu();
@@ -1879,6 +2169,7 @@
       if (!el.modalOverlay.hidden) closeModal();
       else if (!el.confirmOverlay.hidden) closeConfirm();
       else if (!el.reportOverlay.hidden) closeReport();
+      else if (!el.syncOverlay.hidden) closeSyncOverlay();
       else if (!el.dayDetailOverlay.hidden) closeDayDetail();
       else if (!el.moreMenu.hidden) closeMoreMenu();
       else if (!el.snackbar.hidden) hideSnackbar();
