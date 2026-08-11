@@ -69,6 +69,7 @@
     themeToggle: document.getElementById("themeToggle"),
     moreMenuBtn: document.getElementById("moreMenuBtn"),
     moreMenu: document.getElementById("moreMenu"),
+    menuInstall: document.getElementById("menuInstall"),
     menuSync: document.getElementById("menuSync"),
     syncOverlay: document.getElementById("syncOverlay"),
     syncBody: document.getElementById("syncBody"),
@@ -2273,6 +2274,27 @@
   }
 
   // ---------- PWA install ----------
+  // Chrome only fires beforeinstallprompt once it decides the user is
+  // "engaged enough" -- on desktop that can take a while (or never happen in
+  // a short visit), which left the floating install button permanently
+  // hidden with no other way in. The always-visible menu item below is the
+  // reliable fallback: it uses the native prompt when available, and falls
+  // back to plain-language manual instructions (which vary a lot by browser)
+  // when it isn't.
+  function isStandaloneDisplay() {
+    return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+  }
+  function installHelpMessage() {
+    const ua = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+    if (isIOS) {
+      return "Sa Safari: pindutin ang Share button (nasa ibaba, may nakataas na arrow), tapos piliin ang 'Add to Home Screen'.";
+    }
+    if (/Android/.test(ua)) {
+      return "Sa Chrome: buksan ang ⋮ menu ng BROWSER (nasa itaas-kanan ng screen, hindi ang menu ng app na ito), tapos piliin ang 'Install app' o 'Add to Home screen'.";
+    }
+    return "Sa Chrome o Edge: hanapin ang install icon sa kanang bahagi ng address bar (⊕ o katulad), o buksan ang ⋮ menu ng BROWSER (hindi ng app) at piliin ang 'Install Daily Task Tracker & Planner...'.\n\nKung wala pa ring lumalabas: mag-browse muna ng ilang saglit o i-refresh ang page -- minsan naghihintay pa ang browser ng ilang segundo bago mag-alok ng install option.";
+  }
   let deferredInstallEvent = null;
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -2286,7 +2308,19 @@
     deferredInstallEvent = null;
     el.installBtn.hidden = true;
   });
-  window.addEventListener("appinstalled", () => { el.installBtn.hidden = true; });
+  window.addEventListener("appinstalled", () => { el.installBtn.hidden = true; el.menuInstall.hidden = true; });
+  if (isStandaloneDisplay()) el.menuInstall.hidden = true;
+  el.menuInstall.addEventListener("click", async () => {
+    closeMoreMenu();
+    if (deferredInstallEvent) {
+      deferredInstallEvent.prompt();
+      await deferredInstallEvent.userChoice;
+      deferredInstallEvent = null;
+      el.installBtn.hidden = true;
+    } else {
+      showConfirm(installHelpMessage(), [{ label: "OK" }]);
+    }
+  });
 
   // ---------- Service worker (+ update notice) ----------
   if ("serviceWorker" in navigator) {
