@@ -958,7 +958,10 @@ html, body {
   position: fixed; inset: 0;
   background: rgba(6,12,20,0.6);
   display: flex; align-items: center; justify-content: center;
-  z-index: 70;
+  /* Must outrank report/day-detail overlays (also z-index 70): a delete
+     confirmation can be triggered from a button inside either of those,
+     and needs to render on top of them, not paint-order-behind them. */
+  z-index: 75;
   padding: 24px;
 }
 .confirm-box {
