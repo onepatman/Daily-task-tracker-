@@ -1438,6 +1438,7 @@
   let syncStatus = "off"; // 'off' | 'connecting' | 'synced' | 'error'
   let syncError = "";
   let fbApi = null;
+  let firebaseApp = null;
   let syncDb = null;
   let syncUnsub = null;
   let syncReadyPromise = null;
@@ -1454,9 +1455,9 @@
         import("https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js"),
       ]);
       fbApi = { ...appMod, ...authMod, ...fsMod };
-      const app = fbApi.initializeApp(FIREBASE_CONFIG);
-      const auth = fbApi.getAuth(app);
-      syncDb = fbApi.getFirestore(app);
+      firebaseApp = fbApi.initializeApp(FIREBASE_CONFIG);
+      const auth = fbApi.getAuth(firebaseApp);
+      syncDb = fbApi.getFirestore(firebaseApp);
       try { await fbApi.enableIndexedDbPersistence(syncDb); } catch (e) { /* multi-tab or unsupported -- fine without it */ }
       await new Promise((resolve, reject) => {
         const unsub = fbApi.onAuthStateChanged(auth, (user) => {
@@ -1586,6 +1587,84 @@
     renderSyncBody();
   }
 
+  // ---------- Push notifications (FCM, sent by a free GitHub Actions cron) ----------
+  // Reminders fire locally (checkReminders() above) only while a tab is open.
+  // To also notify when the app/browser is fully closed, this device's FCM
+  // token gets stored alongside the synced task list, and a scheduled
+  // GitHub Action (scripts/send-reminders.mjs) scans every few minutes for
+  // due, un-notified reminders and pushes to those tokens. Because it's tied
+  // to the same synced doc, push notifications require sync to be turned on.
+  const VAPID_PUBLIC_KEY = "REPLACE_WITH_VAPID_KEY";
+  const FCM_TOKEN_KEY = "dailyLog.fcmToken";
+  let pushStatus = (("Notification" in window) && Notification.permission === "granted" && localStorage.getItem(FCM_TOKEN_KEY))
+    ? "on" : "off"; // 'off' | 'requesting' | 'on' | 'error'
+  let pushError = "";
+
+  async function ensureMessaging() {
+    await ensureFirebase();
+    if (!fbApi.getMessaging) {
+      const msgMod = await import("https://www.gstatic.com/firebasejs/12.17.1/firebase-messaging.js");
+      fbApi = { ...fbApi, ...msgMod };
+    }
+    return fbApi.getMessaging(firebaseApp);
+  }
+
+  async function enablePush() {
+    if (!syncCode) return;
+    pushStatus = "requesting"; pushError = ""; renderSyncBody();
+    try {
+      if (!("Notification" in window)) throw new Error("Hindi supported ng browser na ito ang notifications.");
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") {
+        pushStatus = "off"; pushError = "Kailangan payagan ang notification permission para gumana ito.";
+        renderSyncBody();
+        return;
+      }
+      const swReg = await navigator.serviceWorker.ready;
+      const messaging = await ensureMessaging();
+      const token = await fbApi.getToken(messaging, { vapidKey: VAPID_PUBLIC_KEY, serviceWorkerRegistration: swReg });
+      if (!token) throw new Error("Walang nakuhang token.");
+      localStorage.setItem(FCM_TOKEN_KEY, token);
+      await fbApi.setDoc(syncDocRef(syncCode), {
+        fcmTokens: fbApi.arrayUnion(token),
+        updatedAt: fbApi.serverTimestamp(),
+        updatedAtLocal: Date.now(),
+      }, { merge: true });
+      pushStatus = "on";
+      renderSyncBody();
+    } catch (e) {
+      console.error("enablePush failed", e);
+      pushStatus = "error"; pushError = "Hindi na-enable ang push notifications. Subukan ulit.";
+      renderSyncBody();
+    }
+  }
+
+  async function disablePush() {
+    const token = localStorage.getItem(FCM_TOKEN_KEY);
+    localStorage.removeItem(FCM_TOKEN_KEY);
+    pushStatus = "off"; pushError = "";
+    renderSyncBody();
+    if (token && syncCode) {
+      try {
+        await ensureFirebase();
+        await fbApi.setDoc(syncDocRef(syncCode), {
+          fcmTokens: fbApi.arrayRemove(token),
+          updatedAt: fbApi.serverTimestamp(),
+          updatedAtLocal: Date.now(),
+        }, { merge: true });
+      } catch (e) { console.error("disablePush cleanup failed", e); }
+    }
+  }
+
+  // Silently re-confirm this device's token is still registered whenever sync
+  // is active and permission was already granted -- tokens can rotate.
+  function resumePushIfEnabled() {
+    if (!syncCode) return;
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    if (!localStorage.getItem(FCM_TOKEN_KEY)) return;
+    enablePush();
+  }
+
   function openSyncOverlay() {
     el.syncOverlay.hidden = false;
     pushOverlayState();
@@ -1638,6 +1717,43 @@
         err.textContent = syncError;
         body.appendChild(err);
       }
+
+      const pushDivider = document.createElement("p");
+      pushDivider.className = "sync-divider";
+      body.appendChild(pushDivider);
+
+      const pushStatusLine = document.createElement("p");
+      pushStatusLine.className = "sync-status-line sync-status-" + (pushStatus === "on" ? "synced" : pushStatus === "error" ? "error" : "connecting");
+      pushStatusLine.textContent = pushStatus === "on" ? "🔔 Naka-on ang push notifications"
+        : pushStatus === "requesting" ? "⏳ Nire-request ang permission..."
+        : "🔕 Naka-off ang push notifications";
+      body.appendChild(pushStatusLine);
+
+      const pushHint = document.createElement("p");
+      pushHint.className = "sync-hint";
+      pushHint.textContent = "Makakatanggap ka ng reminder kahit nakasara ang app o browser, sa lahat ng device na naka-enable dito.";
+      body.appendChild(pushHint);
+
+      if (pushError) {
+        const perr = document.createElement("p");
+        perr.className = "sync-error";
+        perr.textContent = pushError;
+        body.appendChild(perr);
+      }
+
+      const pushBtn = document.createElement("button");
+      pushBtn.type = "button";
+      if (pushStatus === "on") {
+        pushBtn.className = "btn-ghost sync-off-btn";
+        pushBtn.textContent = "I-off ang push notifications";
+        pushBtn.addEventListener("click", disablePush);
+      } else {
+        pushBtn.className = "btn-solid sync-start-btn";
+        pushBtn.textContent = "🔔 I-enable ang push notifications";
+        pushBtn.disabled = pushStatus === "requesting";
+        pushBtn.addEventListener("click", enablePush);
+      }
+      body.appendChild(pushBtn);
 
       const offBtn = document.createElement("button");
       offBtn.type = "button";
@@ -1695,7 +1811,7 @@
 
   // Silently resume a previously-connected sync on load, without popping the overlay open.
   if (syncCode) {
-    ensureFirebase().then(subscribeSync).catch((e) => console.error("auto sync resume failed", e));
+    ensureFirebase().then(subscribeSync).then(resumePushIfEnabled).catch((e) => console.error("auto sync resume failed", e));
   }
 
   // ---------- Print ----------
