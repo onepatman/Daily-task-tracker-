@@ -1594,7 +1594,7 @@
   // GitHub Action (scripts/send-reminders.mjs) scans every few minutes for
   // due, un-notified reminders and pushes to those tokens. Because it's tied
   // to the same synced doc, push notifications require sync to be turned on.
-  const VAPID_PUBLIC_KEY = "REPLACE_WITH_VAPID_KEY";
+  const VAPID_PUBLIC_KEY = "BLLozey36dOxzacLK8xJ8S9dBgr0fKe_w6-CoEHvj3GcJ4gbP1yOYIyLW1wCUT8g2CFbYazA_T-bYwG0rgVAqcE";
   const FCM_TOKEN_KEY = "dailyLog.fcmToken";
   let pushStatus = (("Notification" in window) && Notification.permission === "granted" && localStorage.getItem(FCM_TOKEN_KEY))
     ? "on" : "off"; // 'off' | 'requesting' | 'on' | 'error'
