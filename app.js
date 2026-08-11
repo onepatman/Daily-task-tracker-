@@ -1565,11 +1565,15 @@
       pushDebounceTimer = setTimeout(async () => {
         try {
           lastPushedAt = Date.now();
+          // merge: true is essential here -- without it this setDoc replaces
+          // the WHOLE document on every task edit, silently wiping fields
+          // this call doesn't know about (e.g. fcmTokens registered by the
+          // push-notifications feature).
           await fbApi.setDoc(syncDocRef(syncCode), {
             tasks, templates,
             updatedAt: fbApi.serverTimestamp(),
             updatedAtLocal: lastPushedAt,
-          });
+          }, { merge: true });
         } catch (e) {
           console.error("sync push failed", e);
           syncStatus = "error"; syncError = "Hindi na-save yung huling changes sa cloud.";
