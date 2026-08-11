@@ -1,4 +1,4 @@
-const CACHE_NAME = "daily-log-v6";
+const CACHE_NAME = "daily-log-v7";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -13,7 +13,17 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
   );
-  self.skipWaiting();
+  // Do NOT self.skipWaiting() here. A newly installed worker should sit in
+  // "waiting" until the page explicitly asks it to take over (see the
+  // message handler below) -- that's what lets app.js show an "update
+  // available" prompt and only reload once the user agrees, instead of the
+  // page's assets silently swapping out from under an open tab.
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("activate", (event) => {
