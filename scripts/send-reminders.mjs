@@ -73,6 +73,16 @@ async function run() {
     const data = doc.data();
     const tasks = Array.isArray(data.tasks) ? data.tasks : [];
     const tokens = Array.isArray(data.fcmTokens) ? data.fcmTokens.filter(Boolean) : [];
+    console.log(`Doc ${doc.id}: ${tasks.length} task(s), ${tokens.length} registered token(s)`);
+    for (const t of tasks) {
+      if (!t.time) continue; // only log tasks that at least have a time set, to keep this readable
+      const [h, m] = t.time.split(":").map(Number);
+      console.log(
+        `  - "${t.title}" time=${t.time} reminder=${!!t.reminder} startDate=${t.startDate} repeat=${t.repeat} `
+        + `occursToday=${occursOn(t, dateKey, dateObj)} done=${isDoneOn(t, dateKey)} `
+        + `alreadyNotified=${isNotifiedOn(t, dateKey)} timePassed=${h * 60 + m <= nowMin}`
+      );
+    }
     if (!tokens.length) continue;
 
     let changed = false;
