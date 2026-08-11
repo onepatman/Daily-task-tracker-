@@ -582,6 +582,30 @@ html, body {
 }
 .task-time.due { color: var(--accent); font-weight: 700; }
 
+.task-time-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  align-self: start;
+}
+.task-edit-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.task-edit-btn:active { background: var(--border); }
+
 .subtask-progress-bar {
   margin-top: 8px;
   height: 4px;
@@ -1447,5 +1471,6 @@ html, body {
   }
   .task-check { border-color: #000; background: #fff; color: #000; }
   .task-title, .task-notes, .task-time { color: #000; }
+  .task-edit-btn { display: none; }
 }
 .print-header { display: none; }
