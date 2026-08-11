@@ -1584,6 +1584,11 @@
     syncCode = null;
     localStorage.removeItem(SYNC_CODE_KEY);
     syncStatus = "off"; syncError = "";
+    // A push token registered under the old sync group is meaningless once
+    // that group is gone -- clear the local "on" cache so the UI doesn't
+    // claim push is enabled when nothing is actually registered anymore.
+    localStorage.removeItem(FCM_TOKEN_KEY);
+    pushStatus = "off"; pushError = "";
     renderSyncBody();
   }
 
