@@ -815,16 +815,29 @@
       openTaskDetail(task, dateKey);
     });
 
-    const time = document.createElement("span");
-    time.className = "task-time";
+    const timeCol = document.createElement("div");
+    timeCol.className = "task-time-col";
+
     if (task.time) {
+      const time = document.createElement("span");
+      time.className = "task-time";
       time.textContent = task.time;
       if (!done && isDueSoon(dateKey, task.time)) time.classList.add("due");
-    } else {
-      time.textContent = "—";
+      timeCol.appendChild(time);
     }
 
-    row.append(no, check, main, time);
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "task-edit-btn";
+    editBtn.setAttribute("aria-label", "View task details");
+    editBtn.textContent = "✏️";
+    editBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openTaskDetail(task, dateKey);
+    });
+    timeCol.appendChild(editBtn);
+
+    row.append(no, check, main, timeCol);
     wrap.append(actions, row);
 
     attachSwipe(row, task, dateKey);
