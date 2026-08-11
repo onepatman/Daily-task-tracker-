@@ -1519,29 +1519,39 @@ html, body {
 .day-detail-card-actions button.danger { color: var(--red); border-color: var(--red); }
 .day-detail-card-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-/* ---------- Desktop / laptop dashboard layout ---------- */
+/* ---------- Desktop / laptop dashboard layout ----------
+   Two tiers: 900px is the "laptop" baseline, 1600px is "wide desktop
+   monitor" and scales everything up again. .app's own background is
+   always set to match body's exactly (both var(--bg-2)) so the side
+   gutters read as one continuous surface instead of a visible seam
+   where the narrower content column meets the page. */
 @media (min-width: 900px) {
   body { background: var(--bg-2); }
 
   .app {
     max-width: 1160px;
     padding-bottom: 40px;
+    background:
+      radial-gradient(1200px 500px at 50% -10%, rgba(255,122,26,0.08), transparent 60%),
+      var(--bg-2);
   }
 
-  .brand-header { padding: 30px 16px 10px; }
-  .brand-logo { width: 60px; height: 60px; border-radius: 16px; }
-  .brand-title { font-size: 26px; }
-  .brand-tagline { font-size: 12px; gap: 7px; }
+  .brand-header { padding: 34px 16px 12px; }
+  .brand-logo { width: 68px; height: 68px; border-radius: 18px; }
+  .brand-title { font-size: 28px; }
+  .brand-tagline { font-size: 13px; gap: 8px; margin-top: 6px; }
   .tag-dot { width: 6px; height: 6px; }
 
-  .titleblock { padding: 20px 28px 16px; }
-  .tb-nav { max-width: 460px; margin: 0 auto; }
-  .tb-nav-secondary { max-width: 460px; margin: 10px auto 0; }
-  .tb-sheet-date { font-size: 14px; }
+  .titleblock { padding: 22px 28px 18px; }
+  .tb-nav { max-width: 480px; margin: 0 auto; }
+  .tb-nav-secondary { max-width: 480px; margin: 12px auto 0; }
+  .tb-arrow, .tb-icon-btn { width: 42px; height: 42px; }
+  .tb-select { font-size: 15px; padding: 10px 30px 10px 16px; }
+  .tb-sheet-date { font-size: 15px; margin-top: 14px; }
 
   .app-body {
     display: grid;
-    grid-template-columns: 350px 1fr;
+    grid-template-columns: 360px 1fr;
     align-items: start;
     gap: 32px;
     padding: 0 28px;
@@ -1557,19 +1567,45 @@ html, body {
     scrollbar-width: thin;
   }
   .app-sidebar .notify-pill { margin: 12px 0 0; width: 100%; }
-  .app-sidebar .calendar { padding: 18px 0 4px; }
-  .app-sidebar .calendar-grid { gap: 6px; }
-  .app-sidebar .cal-day { font-size: 14px; border-radius: 12px; }
-  .app-sidebar .calendar-weekdays { font-size: 12px; margin-bottom: 8px; }
-  .app-sidebar .insights-panel { margin: 10px 0 0; padding: 16px; }
+  .app-sidebar .calendar { padding: 20px 0 4px; }
+  .app-sidebar .calendar-grid { gap: 7px; }
+  .app-sidebar .cal-day { font-size: 15px; border-radius: 12px; }
+  .app-sidebar .calendar-weekdays { font-size: 13px; margin-bottom: 10px; }
+  .app-sidebar .insights-panel { margin: 12px 0 0; padding: 18px; }
+  .insight-stat-value { font-size: 22px; }
+  .insight-stat-label { font-size: 11px; }
+  .insight-ring-label span:first-child { font-size: 15px; }
 
   .app-main { min-width: 0; }
-  .app-main .toolbar { margin: 4px 0 0; }
-  .app-main .punchlist { margin: 12px 0 0; }
-  .app-main .week-view { margin: 12px 0 0; }
-  .app-main .timeline-view { margin: 12px 0 0; }
+  .app-main .toolbar { margin: 6px 0 0; }
+  .app-main .punchlist { margin: 14px 0 0; }
+  .app-main .week-view { margin: 14px 0 0; }
+  .app-main .timeline-view { margin: 14px 0 0; }
 
-  .view-tabs-row { padding: 16px 28px 0; max-width: 500px; }
+  .view-tabs-row { padding: 18px 28px 0; max-width: 520px; }
+  .view-tab { font-size: 14px; padding: 11px 16px; }
+  .view-status-badge { font-size: 12px; padding: 9px 14px; }
+
+  .toolbar-search input, .toolbar-select { font-size: 15px; }
+  .toolbar-search-icon { font-size: 16px; }
+  .chip { font-size: 13px; padding: 8px 14px; }
+  .toolbar-row-label { font-size: 11px; }
+
+  .task-row { padding: 16px 14px; gap: 12px; }
+  .task-title { font-size: 15.5px; }
+  .task-time-inline { font-size: 14px; }
+  .task-notes { font-size: 13px; }
+  .task-no { font-size: 12px; }
+  .task-cat-chip { font-size: 11px; padding: 3px 9px; }
+  .task-priority { font-size: 11px; }
+  .task-subtask-progress { font-size: 11px; }
+  .task-check { width: 27px; height: 27px; }
+
+  .week-day-card { padding: 15px; }
+  .week-task-title { font-size: 14px; }
+  .week-task-time { font-size: 12.5px; }
+  .timeline-task-title { font-size: 14px; }
+  .timeline-task-time { font-size: 12.5px; }
 
   .fab {
     right: max(24px, calc((100vw - 1160px) / 2 + 24px));
@@ -1578,54 +1614,61 @@ html, body {
 
 @media (min-width: 1300px) {
   .app { max-width: 1400px; }
-  .app-body { grid-template-columns: 380px 1fr; }
-  .app-sidebar .cal-day { font-size: 15px; }
+  .app-body { grid-template-columns: 390px 1fr; }
+  .app-sidebar .cal-day { font-size: 16px; }
   .fab { right: max(24px, calc((100vw - 1400px) / 2 + 24px)); }
 }
 
-/* ---------- Wide desktop: fill the extra width instead of leaving it as
-   empty gutters, and scale typography up to match the bigger canvas ---------- */
+/* ---------- Wide desktop monitor: fill the extra width instead of
+   leaving it as empty gutters, and scale typography up again to match
+   the bigger canvas ---------- */
 @media (min-width: 1600px) {
   .app { max-width: 1760px; }
-  .app-body { grid-template-columns: 420px 1fr; gap: 40px; }
+  .app-body { grid-template-columns: 440px 1fr; gap: 44px; }
   .fab { right: max(24px, calc((100vw - 1760px) / 2 + 24px)); }
 
-  .brand-title { font-size: 30px; }
-  .brand-tagline { font-size: 13px; }
-  .titleblock { padding: 24px 32px 18px; }
-  .tb-nav, .tb-nav-secondary { max-width: 520px; }
-  .tb-select { font-size: 15px; padding: 10px 30px 10px 16px; }
-  .tb-sheet-date { font-size: 15px; }
-  .view-tabs-row { padding: 18px 32px 0; max-width: 560px; }
-  .view-tab { font-size: 14px; padding: 11px 18px; }
-  .view-status-badge { font-size: 12px; padding: 9px 14px; }
+  .brand-header { padding: 40px 16px 14px; }
+  .brand-logo { width: 80px; height: 80px; border-radius: 20px; }
+  .brand-title { font-size: 36px; }
+  .brand-tagline { font-size: 14px; gap: 9px; }
+  .tag-dot { width: 7px; height: 7px; }
 
-  .app-sidebar .cal-day { font-size: 16px; }
-  .app-sidebar .calendar-weekdays { font-size: 13px; }
-  .insight-stat-value { font-size: 23px; }
-  .insight-stat-label { font-size: 11px; }
-  .insight-ring-label span:first-child { font-size: 15px; }
-  .insights-panel { padding: 18px; }
+  .titleblock { padding: 26px 36px 20px; }
+  .tb-nav, .tb-nav-secondary { max-width: 560px; }
+  .tb-arrow, .tb-icon-btn { width: 46px; height: 46px; font-size: 22px; }
+  .tb-select { font-size: 16px; padding: 11px 32px 11px 18px; }
+  .tb-sheet-date { font-size: 17px; }
+  .view-tabs-row { padding: 20px 36px 0; max-width: 600px; }
+  .view-tab { font-size: 15px; padding: 12px 20px; }
+  .view-status-badge { font-size: 13px; padding: 10px 16px; }
 
-  .toolbar-search input, .toolbar-select { font-size: 15px; }
-  .chip { font-size: 13px; padding: 8px 14px; }
-  .toolbar-row-label { font-size: 11px; }
+  .app-sidebar .cal-day { font-size: 17px; }
+  .app-sidebar .calendar-weekdays { font-size: 14px; }
+  .insight-stat-value { font-size: 26px; }
+  .insight-stat-label { font-size: 12px; }
+  .insight-ring-label span:first-child { font-size: 17px; }
+  .insights-panel { padding: 20px; }
 
-  .task-row { padding: 15px 13px; gap: 10px; }
-  .task-title { font-size: 15.5px; }
-  .task-time-inline { font-size: 14px; }
-  .task-notes { font-size: 13px; }
-  .task-no { font-size: 12px; }
-  .task-cat-chip { font-size: 11px; padding: 3px 8px; }
-  .task-priority { font-size: 11px; }
-  .task-subtask-progress { font-size: 11px; }
-  .task-check { width: 26px; height: 26px; }
+  .toolbar-search input, .toolbar-select { font-size: 16px; }
+  .toolbar-search input { padding: 12px 14px 12px 38px; }
+  .chip { font-size: 14px; padding: 9px 16px; }
+  .toolbar-row-label { font-size: 12px; }
 
-  .week-day-card { padding: 14px; }
-  .week-task-title { font-size: 13.5px; }
-  .week-task-time { font-size: 12px; }
-  .timeline-task-title { font-size: 13.5px; }
-  .timeline-task-time { font-size: 12px; }
+  .task-row { padding: 18px 16px; gap: 12px; }
+  .task-title { font-size: 17px; }
+  .task-time-inline { font-size: 15px; }
+  .task-notes { font-size: 14px; }
+  .task-no { font-size: 13px; }
+  .task-cat-chip { font-size: 12px; padding: 4px 10px; }
+  .task-priority { font-size: 12px; }
+  .task-subtask-progress { font-size: 12px; }
+  .task-check { width: 29px; height: 29px; }
+
+  .week-day-card { padding: 17px; }
+  .week-task-title { font-size: 15px; }
+  .week-task-time { font-size: 13.5px; }
+  .timeline-task-title { font-size: 15px; }
+  .timeline-task-time { font-size: 13.5px; }
 }
 
 /* ---------- Print ---------- */
