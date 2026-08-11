@@ -55,6 +55,8 @@
   let tpMinute = 0;
   let tpAmPm = "AM";
   let dayDetailDateKey = null;
+  let dayDetailMode = "day"; // 'day' | 'task'
+  let dayDetailTask = null;
 
   // ---------- Elements ----------
   const el = {
@@ -147,6 +149,7 @@
     snackbar: document.getElementById("snackbar"),
     snackbarText: document.getElementById("snackbarText"),
     snackbarUndo: document.getElementById("snackbarUndo"),
+    snackbarDismiss: document.getElementById("snackbarDismiss"),
     reminderBanner: document.getElementById("reminderBanner"),
     reminderText: document.getElementById("reminderText"),
     snoozeReminder: document.getElementById("snoozeReminder"),
@@ -304,6 +307,9 @@
   }
 
   // ---------- Confirm dialog ----------
+  function closeConfirm() {
+    el.confirmOverlay.hidden = true;
+  }
   function showConfirm(message, buttons) {
     el.confirmMessage.textContent = message;
     el.confirmActions.innerHTML = "";
@@ -314,15 +320,16 @@
       if (b.danger) btn.classList.add("confirm-danger");
       if (b.cancel) btn.classList.add("confirm-cancel");
       btn.addEventListener("click", () => {
-        el.confirmOverlay.hidden = true;
+        closeConfirm();
         if (b.onClick) b.onClick();
       });
       el.confirmActions.appendChild(btn);
     });
     el.confirmOverlay.hidden = false;
+    pushOverlayState();
   }
   el.confirmOverlay.addEventListener("click", (e) => {
-    if (e.target === el.confirmOverlay) el.confirmOverlay.hidden = true;
+    if (e.target === el.confirmOverlay) closeConfirm();
   });
 
   function requestDelete(task, dateKey) {
@@ -363,14 +370,17 @@
     }
   }
 
-  // ---------- Snackbar (undo) ----------
-  function showSnackbar(text, undoAction) {
+  // ---------- Snackbar (undo / notices) ----------
+  function showSnackbar(text, actionFn, actionLabel) {
     clearTimeout(snackbarTimer);
     el.snackbarText.textContent = text;
-    el.snackbarUndo.hidden = !undoAction;
-    pendingUndo = undoAction || null;
+    el.snackbarUndo.textContent = actionLabel || "Undo";
+    el.snackbarUndo.hidden = !actionFn;
+    pendingUndo = actionFn || null;
     el.snackbar.hidden = false;
-    snackbarTimer = setTimeout(hideSnackbar, 5000);
+    if (actionLabel !== "Refresh") {
+      snackbarTimer = setTimeout(hideSnackbar, 5000);
+    }
   }
   function hideSnackbar() {
     el.snackbar.hidden = true;
@@ -379,6 +389,41 @@
   el.snackbarUndo.addEventListener("click", () => {
     if (pendingUndo) pendingUndo();
     hideSnackbar();
+  });
+  el.snackbarDismiss.addEventListener("click", hideSnackbar);
+
+  // ---------- Overlay history (Back button closes overlays, not the app) ----------
+  // Opening an overlay pushes one history entry so the hardware/browser Back
+  // button closes it instead of exiting the app. Closing an overlay via a
+  // button/backdrop/Escape does NOT call history.back() -- history.back() is
+  // asynchronous, so calling it and then immediately pushState-ing (e.g. the
+  // day-detail popup's Edit button, which closes the popup and opens the
+  // edit modal in the same tick) races the pending navigation against the
+  // new push in a way that's unreliable across browsers. Instead, opening an
+  // overlay reuses (replaceState) the current entry if one is already
+  // marked as ours, so transitioning between overlays never grows the stack,
+  // and a leftover marker after a button-close is harmless: it's simply
+  // reused by the next overlay that opens, or silently absorbed by one
+  // no-op Back press if the user backs out without opening anything else.
+  function pushOverlayState() {
+    try {
+      if (window.history.state && window.history.state.dtOverlay) {
+        history.replaceState({ dtOverlay: true }, "");
+      } else {
+        history.pushState({ dtOverlay: true }, "");
+      }
+    } catch (e) { /* ignore */ }
+  }
+  function closeTopmostOverlay() {
+    if (!el.modalOverlay.hidden) { closeModal(); return true; }
+    if (!el.confirmOverlay.hidden) { closeConfirm(); return true; }
+    if (!el.reportOverlay.hidden) { closeReport(); return true; }
+    if (!el.dayDetailOverlay.hidden) { closeDayDetail(); return true; }
+    if (!el.moreMenu.hidden) { closeMoreMenu(); return true; }
+    return false;
+  }
+  window.addEventListener("popstate", () => {
+    closeTopmostOverlay();
   });
 
   // ---------- Theme ----------
@@ -403,6 +448,7 @@
   function openMoreMenu() {
     el.moreMenu.hidden = false;
     el.moreMenuBtn.setAttribute("aria-expanded", "true");
+    pushOverlayState();
   }
   function closeMoreMenu() {
     el.moreMenu.hidden = true;
@@ -619,6 +665,31 @@
     }
   }
 
+  // ---------- Inline subtask checklist (Day/Week views) ----------
+  function buildInlineSubtaskChecklist(task, wrapClass, rowClass) {
+    const wrap = document.createElement("div");
+    wrap.className = wrapClass;
+    task.subtasks.forEach((s) => {
+      const row = document.createElement("label");
+      row.className = rowClass + (s.done ? " done" : "");
+      row.addEventListener("click", (e) => e.stopPropagation());
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = !!s.done;
+      cb.addEventListener("change", () => {
+        s.done = cb.checked;
+        row.classList.toggle("done", s.done);
+        saveTasks();
+        renderAll();
+      });
+      const span = document.createElement("span");
+      span.textContent = s.title;
+      row.append(cb, span);
+      wrap.appendChild(row);
+    });
+    return wrap;
+  }
+
   // ---------- Day view (punch-list) ----------
   function renderSheet() {
     const allDayTasks = tasksForDate(selectedDate);
@@ -730,11 +801,12 @@
       fill.style.width = pct + "%";
       bar.appendChild(fill);
       main.appendChild(bar);
+      main.appendChild(buildInlineSubtaskChecklist(task, "task-subtask-list", "task-subtask-row"));
     }
 
     main.addEventListener("click", () => {
       if (row.dataset.suppressClick === "1") return;
-      openEditModal(task, dateKey);
+      openTaskDetail(task, dateKey);
     });
 
     const time = document.createElement("span");
@@ -922,6 +994,9 @@
           time.textContent = t.time || "";
           row.append(dot, ttl, time);
           list.appendChild(row);
+          if (t.subtasks && t.subtasks.length) {
+            list.appendChild(buildInlineSubtaskChecklist(t, "week-task-subtasks", "week-task-subtask-row"));
+          }
         });
         if (dayTasks.length > 6) {
           const more = document.createElement("div");
@@ -944,18 +1019,40 @@
 
   // ---------- Day detail popup (from Week view) ----------
   function openDayDetail(dateKey) {
+    dayDetailMode = "day";
     dayDetailDateKey = dateKey;
+    dayDetailTask = null;
     renderDayDetail();
+    el.dayDetailViewFull.hidden = false;
     el.dayDetailOverlay.hidden = false;
+    pushOverlayState();
+  }
+  function openTaskDetail(task, dateKey) {
+    dayDetailMode = "task";
+    dayDetailDateKey = dateKey;
+    dayDetailTask = task;
+    renderDayDetail();
+    el.dayDetailViewFull.hidden = true;
+    el.dayDetailOverlay.hidden = false;
+    pushOverlayState();
   }
   function closeDayDetail() {
     el.dayDetailOverlay.hidden = true;
     dayDetailDateKey = null;
+    dayDetailTask = null;
   }
   function renderDayDetail() {
+    el.dayDetailBody.innerHTML = "";
+
+    if (dayDetailMode === "task") {
+      if (!dayDetailTask || !occursOn(dayDetailTask, dayDetailDateKey)) { closeDayDetail(); return; }
+      el.dayDetailTitle.textContent = dayDetailTask.title;
+      el.dayDetailBody.appendChild(buildDayDetailCard(dayDetailTask, dayDetailDateKey));
+      return;
+    }
+
     const dateObj = parseDateKey(dayDetailDateKey);
     el.dayDetailTitle.textContent = `${DAY_NAMES[dateObj.getDay()]}, ${MONTHS[dateObj.getMonth()].slice(0, 3)} ${dateObj.getDate()}`;
-    el.dayDetailBody.innerHTML = "";
     const list = tasksForDate(dayDetailDateKey).sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
     if (list.length === 0) {
       const empty = document.createElement("p");
@@ -1115,7 +1212,7 @@
     ttl.className = "timeline-task-title";
     ttl.textContent = t.title;
     item.appendChild(ttl);
-    item.addEventListener("click", () => openEditModal(t, selectedDate));
+    item.addEventListener("click", () => openTaskDetail(t, selectedDate));
     return item;
   }
 
@@ -1270,6 +1367,7 @@
   function openReport() {
     renderReport();
     el.reportOverlay.hidden = false;
+    pushOverlayState();
   }
   function closeReport() {
     el.reportOverlay.hidden = true;
@@ -1640,6 +1738,7 @@
     closeDatePicker();
     closeTimePicker();
     el.modalOverlay.hidden = false;
+    pushOverlayState();
     setTimeout(() => el.taskTitle.focus(), 50);
   }
   function openEditModal(task, dateKey) {
@@ -1662,6 +1761,7 @@
     closeDatePicker();
     closeTimePicker();
     el.modalOverlay.hidden = false;
+    pushOverlayState();
     setTimeout(() => el.taskTitle.focus(), 50);
   }
   function closeModal() {
@@ -1743,7 +1843,7 @@
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       if (!el.modalOverlay.hidden) closeModal();
-      else if (!el.confirmOverlay.hidden) el.confirmOverlay.hidden = true;
+      else if (!el.confirmOverlay.hidden) closeConfirm();
       else if (!el.reportOverlay.hidden) closeReport();
       else if (!el.dayDetailOverlay.hidden) closeDayDetail();
       else if (!el.moreMenu.hidden) closeMoreMenu();
@@ -1863,11 +1963,40 @@
   });
   window.addEventListener("appinstalled", () => { el.installBtn.hidden = true; });
 
-  // ---------- Service worker ----------
+  // ---------- Service worker (+ update notice) ----------
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("service-worker.js").catch((e) => {
+      navigator.serviceWorker.register("service-worker.js").then((reg) => {
+        function promptUpdate(worker) {
+          showSnackbar("A new version is available.", () => {
+            worker.postMessage("SKIP_WAITING");
+          }, "Refresh");
+        }
+        // A worker already sitting in "waiting" (installed while no tab had
+        // focus) means an update is ready right now.
+        if (reg.waiting && navigator.serviceWorker.controller) {
+          promptUpdate(reg.waiting);
+        }
+        reg.addEventListener("updatefound", () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener("statechange", () => {
+            if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+              promptUpdate(reg.waiting || newWorker);
+            }
+          });
+        });
+      }).catch((e) => {
         console.warn("Service worker registration failed", e);
+      });
+
+      // Reload once the new worker actually takes control -- only happens
+      // after the user clicks "Refresh" above and posts SKIP_WAITING.
+      let refreshedOnce = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (refreshedOnce) return;
+        refreshedOnce = true;
+        window.location.reload();
       });
     });
   }

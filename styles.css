@@ -597,6 +597,30 @@ html, body {
   transition: width 200ms ease;
 }
 
+.task-subtask-list { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.task-subtask-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.task-subtask-row input[type="checkbox"] { width: 15px; height: 15px; flex-shrink: 0; accent-color: var(--green); cursor: pointer; }
+.task-subtask-row span { color: var(--text-soft); }
+.task-subtask-row.done span { text-decoration: line-through; color: var(--text-faint); }
+
+.week-task-subtasks { margin: 0 0 6px 15px; display: flex; flex-direction: column; gap: 3px; }
+.week-task-subtask-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.week-task-subtask-row input[type="checkbox"] { width: 12px; height: 12px; flex-shrink: 0; accent-color: var(--green); cursor: pointer; }
+.week-task-subtask-row span { color: var(--text-faint); }
+.week-task-subtask-row.done span { text-decoration: line-through; opacity: 0.65; }
+
 .empty-state {
   padding: 32px 16px 36px;
   text-align: center;
@@ -1175,6 +1199,7 @@ html, body {
   padding: 4px 8px;
   flex-shrink: 0;
 }
+.snackbar-dismiss { color: var(--text-faint) !important; font-weight: 400 !important; font-size: 12px !important; }
 
 /* ---------- Reminder snooze ---------- */
 .btn-snooze { font-size: 12px; white-space: nowrap; }
