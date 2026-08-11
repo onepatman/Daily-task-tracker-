@@ -68,6 +68,8 @@ html, body {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   background:
     radial-gradient(1200px 500px at 50% -10%, rgba(255,122,26,0.10), transparent 60%),
     var(--bg);
@@ -281,6 +283,7 @@ html, body {
 .app-footer {
   text-align: center;
   padding: 28px 16px 8px;
+  margin-top: auto;
 }
 .app-footer-brand {
   margin: 0;
@@ -1574,10 +1577,55 @@ html, body {
 }
 
 @media (min-width: 1300px) {
-  .app { max-width: 1320px; }
+  .app { max-width: 1400px; }
   .app-body { grid-template-columns: 380px 1fr; }
   .app-sidebar .cal-day { font-size: 15px; }
-  .fab { right: max(24px, calc((100vw - 1320px) / 2 + 24px)); }
+  .fab { right: max(24px, calc((100vw - 1400px) / 2 + 24px)); }
+}
+
+/* ---------- Wide desktop: fill the extra width instead of leaving it as
+   empty gutters, and scale typography up to match the bigger canvas ---------- */
+@media (min-width: 1600px) {
+  .app { max-width: 1760px; }
+  .app-body { grid-template-columns: 420px 1fr; gap: 40px; }
+  .fab { right: max(24px, calc((100vw - 1760px) / 2 + 24px)); }
+
+  .brand-title { font-size: 30px; }
+  .brand-tagline { font-size: 13px; }
+  .titleblock { padding: 24px 32px 18px; }
+  .tb-nav, .tb-nav-secondary { max-width: 520px; }
+  .tb-select { font-size: 15px; padding: 10px 30px 10px 16px; }
+  .tb-sheet-date { font-size: 15px; }
+  .view-tabs-row { padding: 18px 32px 0; max-width: 560px; }
+  .view-tab { font-size: 14px; padding: 11px 18px; }
+  .view-status-badge { font-size: 12px; padding: 9px 14px; }
+
+  .app-sidebar .cal-day { font-size: 16px; }
+  .app-sidebar .calendar-weekdays { font-size: 13px; }
+  .insight-stat-value { font-size: 23px; }
+  .insight-stat-label { font-size: 11px; }
+  .insight-ring-label span:first-child { font-size: 15px; }
+  .insights-panel { padding: 18px; }
+
+  .toolbar-search input, .toolbar-select { font-size: 15px; }
+  .chip { font-size: 13px; padding: 8px 14px; }
+  .toolbar-row-label { font-size: 11px; }
+
+  .task-row { padding: 15px 13px; gap: 10px; }
+  .task-title { font-size: 15.5px; }
+  .task-time-inline { font-size: 14px; }
+  .task-notes { font-size: 13px; }
+  .task-no { font-size: 12px; }
+  .task-cat-chip { font-size: 11px; padding: 3px 8px; }
+  .task-priority { font-size: 11px; }
+  .task-subtask-progress { font-size: 11px; }
+  .task-check { width: 26px; height: 26px; }
+
+  .week-day-card { padding: 14px; }
+  .week-task-title { font-size: 13.5px; }
+  .week-task-time { font-size: 12px; }
+  .timeline-task-title { font-size: 13.5px; }
+  .timeline-task-time { font-size: 12px; }
 }
 
 /* ---------- Print ---------- */
