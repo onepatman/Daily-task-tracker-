@@ -104,7 +104,7 @@ async function run() {
             token,
             data: {
               title: "Daily Task Tracker & Planner",
-              body: `${t.title} — ${t.time}`,
+              body: `${t.title} — ${t.endTime ? `${t.time}–${t.endTime}` : t.time}`,
               tag: `${t.id}-${dateKey}`,
             },
           });

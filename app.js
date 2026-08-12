@@ -54,6 +54,7 @@
   let tpHour24 = null;
   let tpMinute = 0;
   let tpAmPm = "AM";
+  let tpTarget = "start"; // 'start' | 'end' -- which field the shared time picker is currently editing
   let dayDetailDateKey = null;
   let dayDetailMode = "day"; // 'day' | 'task'
   let dayDetailTask = null;
@@ -124,6 +125,9 @@
     taskTime: document.getElementById("taskTime"),
     taskTimeBtn: document.getElementById("taskTimeBtn"),
     taskTimeDisplay: document.getElementById("taskTimeDisplay"),
+    taskEndTime: document.getElementById("taskEndTime"),
+    taskEndTimeBtn: document.getElementById("taskEndTimeBtn"),
+    taskEndTimeDisplay: document.getElementById("taskEndTimeDisplay"),
     timePickerPopover: document.getElementById("timePickerPopover"),
     tpHourDisplay: document.getElementById("tpHourDisplay"),
     tpMinuteDisplay: document.getElementById("tpMinuteDisplay"),
@@ -196,8 +200,14 @@
     return `${h12}:${String(m).padStart(2, "0")} ${period}`;
   }
 
+  function timeRangeLabel(task) {
+    if (!task.time) return "";
+    return task.endTime ? `${task.time}–${task.endTime}` : task.time;
+  }
+
   // ---------- Persistence & migration ----------
   function migrateTask(t) {
+    if (t.endTime === undefined) t.endTime = "";
     if (t.repeat !== undefined) return t;
     return {
       id: t.id,
@@ -205,6 +215,7 @@
       category: t.category || "other",
       priority: t.priority || "medium",
       time: t.time || "",
+      endTime: t.endTime || "",
       reminder: !!t.reminder,
       notes: t.notes || "",
       subtasks: t.subtasks || [],
@@ -475,7 +486,7 @@
     const path = e.composedPath();
     if (!el.moreMenu.hidden && !path.includes(el.moreMenuBtn) && !path.includes(el.moreMenu)) closeMoreMenu();
     if (!el.datePickerPopover.hidden && !path.includes(el.taskDateBtn) && !path.includes(el.datePickerPopover)) closeDatePicker();
-    if (!el.timePickerPopover.hidden && !path.includes(el.taskTimeBtn) && !path.includes(el.timePickerPopover)) closeTimePicker();
+    if (!el.timePickerPopover.hidden && !path.includes(el.taskTimeBtn) && !path.includes(el.taskEndTimeBtn) && !path.includes(el.timePickerPopover)) closeTimePicker();
   });
 
   // ---------- View tabs (Day / Week / Timeline) ----------
@@ -842,7 +853,7 @@
       timeRow.className = "task-time-row";
       const timeInline = document.createElement("span");
       timeInline.className = "task-time-inline";
-      timeInline.textContent = task.time;
+      timeInline.textContent = timeRangeLabel(task);
       if (!done && isDueSoon(dateKey, task.time)) timeInline.classList.add("due");
       timeRow.appendChild(timeInline);
       row.appendChild(timeRow);
@@ -1026,7 +1037,7 @@
           if (t.time) {
             const time = document.createElement("span");
             time.className = "week-task-time";
-            time.textContent = t.time;
+            time.textContent = timeRangeLabel(t);
             row.append(dot, time, ttl);
           } else {
             row.append(dot, ttl);
@@ -1111,7 +1122,7 @@
     if (task.time) {
       const time = document.createElement("span");
       time.className = "day-detail-card-time";
-      time.textContent = task.time;
+      time.textContent = timeRangeLabel(task);
       head.appendChild(time);
     }
     const title = document.createElement("span");
@@ -1244,7 +1255,7 @@
     if (showTime) {
       const time = document.createElement("span");
       time.className = "timeline-task-time";
-      time.textContent = t.time;
+      time.textContent = timeRangeLabel(t);
       item.appendChild(time);
     }
     const ttl = document.createElement("span");
@@ -1853,9 +1864,9 @@
   });
   el.menuExportCsv.addEventListener("click", () => {
     closeMoreMenu();
-    const headers = ["title", "category", "priority", "date", "time", "repeat", "done", "notes"];
+    const headers = ["title", "category", "priority", "date", "time", "end_time", "repeat", "done", "notes"];
     const rows = tasks.map((t) => [
-      t.title, t.category, t.priority, t.startDate, t.time,
+      t.title, t.category, t.priority, t.startDate, t.time, t.endTime || "",
       t.repeat, t.repeat === "none" ? t.done : "", t.notes || "",
     ].map(csvEscape).join(","));
     const csv = [headers.join(","), ...rows].join("\n");
@@ -2068,9 +2079,13 @@
     el.tpHourDisplay.textContent = String(h12);
     el.tpMinuteDisplay.textContent = String(tpMinute).padStart(2, "0");
   }
-  function openTimePicker() {
-    if (el.taskTime.value) {
-      const [h, m] = el.taskTime.value.split(":").map(Number);
+  function timeInputFor(target) { return target === "end" ? el.taskEndTime : el.taskTime; }
+  function timeDisplayFor(target) { return target === "end" ? el.taskEndTimeDisplay : el.taskTimeDisplay; }
+  function openTimePicker(target) {
+    tpTarget = target === "end" ? "end" : "start";
+    const input = timeInputFor(tpTarget);
+    if (input.value) {
+      const [h, m] = input.value.split(":").map(Number);
       tpHour24 = h; tpMinute = m; tpAmPm = h >= 12 ? "PM" : "AM";
     } else {
       tpHour24 = null; tpMinute = 0;
@@ -2081,30 +2096,40 @@
     buildClockFace();
     updateTimeReadout();
     el.timePickerPopover.hidden = false;
-    el.taskTimeBtn.classList.add("active");
+    el.taskTimeBtn.classList.toggle("active", tpTarget === "start");
+    el.taskEndTimeBtn.classList.toggle("active", tpTarget === "end");
     closeDatePicker();
   }
   function closeTimePicker() {
     el.timePickerPopover.hidden = true;
     el.taskTimeBtn.classList.remove("active");
+    el.taskEndTimeBtn.classList.remove("active");
   }
   el.taskTimeBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    if (el.timePickerPopover.hidden) openTimePicker(); else closeTimePicker();
+    if (el.timePickerPopover.hidden || tpTarget !== "start") openTimePicker("start"); else closeTimePicker();
+  });
+  el.taskEndTimeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (el.timePickerPopover.hidden || tpTarget !== "end") openTimePicker("end"); else closeTimePicker();
   });
   el.tpDone.addEventListener("click", () => {
+    const input = timeInputFor(tpTarget);
+    const display = timeDisplayFor(tpTarget);
     if (tpHour24 == null) {
-      el.taskTime.value = "";
-      el.taskTimeDisplay.textContent = "No time set";
+      input.value = "";
+      display.textContent = "No time set";
     } else {
-      el.taskTime.value = `${String(tpHour24).padStart(2, "0")}:${String(tpMinute).padStart(2, "0")}`;
-      el.taskTimeDisplay.textContent = formatTimeDisplay(el.taskTime.value);
+      input.value = `${String(tpHour24).padStart(2, "0")}:${String(tpMinute).padStart(2, "0")}`;
+      display.textContent = formatTimeDisplay(input.value);
     }
     closeTimePicker();
   });
   el.tpClear.addEventListener("click", () => {
-    el.taskTime.value = "";
-    el.taskTimeDisplay.textContent = "No time set";
+    const input = timeInputFor(tpTarget);
+    const display = timeDisplayFor(tpTarget);
+    input.value = "";
+    display.textContent = "No time set";
     closeTimePicker();
   });
 
@@ -2129,6 +2154,8 @@
     el.taskPriority.value = tpl.priority;
     el.taskTime.value = tpl.time || "";
     el.taskTimeDisplay.textContent = tpl.time ? formatTimeDisplay(tpl.time) : "No time set";
+    el.taskEndTime.value = tpl.endTime || "";
+    el.taskEndTimeDisplay.textContent = tpl.endTime ? formatTimeDisplay(tpl.endTime) : "No time set";
     el.taskRepeat.value = tpl.repeat || "none";
     el.taskReminder.checked = tpl.reminder !== false;
     el.taskNotes.value = tpl.notes || "";
@@ -2144,6 +2171,7 @@
       category: el.taskCategory.value,
       priority: el.taskPriority.value,
       time: el.taskTime.value || "",
+      endTime: el.taskEndTime.value || "",
       repeat: el.taskRepeat.value,
       reminder: el.taskReminder.checked,
       notes: el.taskNotes.value.trim(),
@@ -2177,6 +2205,8 @@
     el.taskDateDisplay.textContent = formatDateDisplay(selectedDate);
     el.taskTime.value = "";
     el.taskTimeDisplay.textContent = "No time set";
+    el.taskEndTime.value = "";
+    el.taskEndTimeDisplay.textContent = "No time set";
     el.taskCategory.value = "work";
     el.taskPriority.value = "medium";
     el.taskRepeat.value = "none";
@@ -2201,6 +2231,8 @@
     el.taskPriority.value = task.priority;
     el.taskTime.value = task.time || "";
     el.taskTimeDisplay.textContent = task.time ? formatTimeDisplay(task.time) : "No time set";
+    el.taskEndTime.value = task.endTime || "";
+    el.taskEndTimeDisplay.textContent = task.endTime ? formatTimeDisplay(task.endTime) : "No time set";
     el.taskRepeat.value = task.repeat;
     el.taskReminder.checked = task.reminder;
     el.taskNotes.value = task.notes || "";
@@ -2232,17 +2264,22 @@
     const category = el.taskCategory.value;
     const priority = el.taskPriority.value;
     const time = el.taskTime.value || "";
+    const endTime = el.taskEndTime.value || "";
+    if (time && endTime && endTime <= time) {
+      showConfirm("End time must be after the start time.", [{ label: "OK" }]);
+      return;
+    }
     const reminder = time ? el.taskReminder.checked : false;
     const notes = el.taskNotes.value.trim();
     const repeat = el.taskRepeat.value;
     const subtasks = modalSubtasks.map((s) => ({ id: s.id, title: s.title, done: !!s.done }));
 
     if (editingTask) {
-      Object.assign(editingTask, { title, category, priority, time, reminder, notes, repeat, subtasks, startDate });
+      Object.assign(editingTask, { title, category, priority, time, endTime, reminder, notes, repeat, subtasks, startDate });
     } else {
       tasks.push({
         id: uid(),
-        title, category, priority, time, reminder, notes, subtasks,
+        title, category, priority, time, endTime, reminder, notes, subtasks,
         repeat,
         startDate,
         done: false,
@@ -2371,7 +2408,7 @@
         setNotifiedOn(t, nowKey);
         changed = true;
         beep();
-        showReminderBanner(`${t.title} — ${t.time}`, t, nowKey);
+        showReminderBanner(`${t.title} — ${timeRangeLabel(t)}`, t, nowKey);
         if ("Notification" in window && Notification.permission === "granted") {
           try {
             new Notification("Daily Log reminder", { body: t.title, tag: t.id + nowKey });
