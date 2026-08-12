@@ -58,7 +58,10 @@
 
 html, body {
   margin: 0;
-  background: var(--bg-2);
+  /* Matches .app's own base background (not --bg-2) so that on any phone
+     whose CSS viewport is wider than .app's 480px cap, the leftover side
+     gutters blend into the app instead of reading as a visible border. */
+  background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
