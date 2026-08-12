@@ -129,16 +129,16 @@ html, body {
   max-width: 100%;
 }
 .brand-logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 13px;
   box-shadow: var(--shadow-sm);
   flex-shrink: 0;
 }
 .brand-copy { text-align: left; min-width: 0; }
 .brand-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 19px;
   font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--text);
@@ -151,7 +151,7 @@ html, body {
   align-items: center;
   gap: 5px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
   color: var(--text-faint);
@@ -191,10 +191,10 @@ html, body {
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--accent-2);
-  font-size: 18px;
+  font-size: 19px;
   line-height: 1;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
   border-radius: 50%;
   cursor: pointer;
@@ -203,7 +203,7 @@ html, body {
   justify-content: center;
   transition: background-color 150ms ease, transform 100ms ease;
 }
-.tb-arrow { font-size: 20px; }
+.tb-arrow { font-size: 21px; }
 .tb-arrow:active, .tb-icon-btn:active { transform: scale(0.92); background: var(--surface-2); }
 
 .tb-monthyear-group {
@@ -223,8 +223,8 @@ html, body {
   font-family: var(--font-mono);
   font-weight: 700;
   letter-spacing: 0.06em;
-  font-size: 14px;
-  padding: 9px 28px 9px 14px;
+  font-size: 15px;
+  padding: 10px 30px 10px 15px;
   border-radius: 999px;
   cursor: pointer;
   text-align: center;
@@ -245,7 +245,7 @@ html, body {
   border: none;
   color: var(--accent-2);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
   cursor: pointer;
@@ -256,7 +256,7 @@ html, body {
   margin: 12px 0 0;
   text-align: center;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--text);
@@ -272,26 +272,30 @@ html, body {
 .view-status-badge {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--accent);
   background: var(--surface);
   border: 1px solid var(--border);
-  padding: 8px 12px;
+  padding: 9px 13px;
   border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 
-/* ---------- Footer ---------- */
+/* ---------- Footer ----------
+   On mobile the footer simply follows the content -- pinning it to the
+   bottom of a tall 100vh viewport (via margin-top: auto) left a big dead
+   gap above it whenever a day had few or no tasks. That bottom-pin is
+   still worth it on the wide desktop layout (see the 900px+ tier below),
+   where the two-column dashboard fills most of the screen anyway. */
 .app-footer {
   text-align: center;
   padding: 28px 16px 8px;
-  margin-top: auto;
 }
 .app-footer-brand {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--accent);
@@ -299,7 +303,7 @@ html, body {
 .app-footer-credit {
   margin: 6px 0 0;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   color: var(--text-faint);
 }
@@ -326,7 +330,7 @@ html, body {
   grid-template-columns: repeat(7, 1fr);
   color: var(--text-faint);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
   margin-bottom: 6px;
 }
@@ -345,7 +349,7 @@ html, body {
   background: var(--surface);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 14.5px;
   border: 1px solid transparent;
   cursor: pointer;
   position: relative;
@@ -411,12 +415,12 @@ html, body {
   justify-content: center;
   line-height: 1.1;
 }
-.insight-ring-label span:first-child { font-size: 14px; font-weight: 700; font-family: var(--font-mono); color: var(--text); }
-.insight-ring-label span:last-child { font-size: 9px; color: var(--text-faint); letter-spacing: 0.05em; }
+.insight-ring-label span:first-child { font-size: 15px; font-weight: 700; font-family: var(--font-mono); color: var(--text); }
+.insight-ring-label span:last-child { font-size: 10px; color: var(--text-faint); letter-spacing: 0.05em; }
 .insight-stats { flex: 1; display: flex; align-items: center; gap: 14px; min-width: 0; }
 .insight-stat { text-align: center; flex-shrink: 0; }
-.insight-stat-value { display: block; font-family: var(--font-mono); font-size: 20px; font-weight: 700; color: var(--accent); }
-.insight-stat-label { display: block; font-size: 10px; color: var(--text-faint); letter-spacing: 0.04em; }
+.insight-stat-value { display: block; font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: var(--accent); }
+.insight-stat-label { display: block; font-size: 11px; color: var(--text-faint); letter-spacing: 0.04em; }
 .insight-sparkline {
   flex: 1;
   display: flex;
@@ -454,34 +458,35 @@ html, body {
   position: absolute;
   left: 12px;
   color: var(--text-faint);
-  font-size: 15px;
+  font-size: 16px;
   pointer-events: none;
 }
 .toolbar-search input {
   width: 100%;
-  padding: 10px 12px 10px 34px;
+  padding: 11px 12px 11px 36px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  font-size: 14px;
+  font-size: 15px;
   font-family: var(--font-sans);
 }
 .toolbar-search input::placeholder { color: var(--text-faint); }
 .toolbar-row { display: flex; align-items: center; gap: 8px; }
+.toolbar-row-sort { margin-top: 2px; }
 .toolbar-row-label {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-faint);
   white-space: nowrap;
-  min-width: 58px;
+  min-width: 60px;
 }
 .chip-group {
   display: flex;
-  gap: 6px;
+  gap: 7px;
   overflow-x: auto;
   flex: 1;
   padding-bottom: 2px;
@@ -490,12 +495,12 @@ html, body {
 .chip-group::-webkit-scrollbar { display: none; }
 .chip {
   flex-shrink: 0;
-  padding: 6px 12px;
+  padding: 7px 13px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -512,12 +517,12 @@ html, body {
 .chip.active .chip-dot { background: var(--on-accent); }
 .toolbar-select {
   flex-shrink: 0;
-  padding: 8px 10px;
+  padding: 9px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: 13px;
   font-family: var(--font-sans);
   cursor: pointer;
 }
@@ -533,7 +538,7 @@ html, body {
   gap: 6px;
   padding: 6px 6px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   color: var(--text-faint);
 }
@@ -605,10 +610,10 @@ html, body {
 .task-no {
   font-family: var(--font-mono);
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 .task-check {
-  width: 24px; height: 24px;
+  width: 26px; height: 26px;
   border: 2px solid var(--text-faint);
   border-radius: 7px;
   background: var(--surface-2);
@@ -633,21 +638,21 @@ html, body {
 .task-time-inline {
   font-family: var(--font-mono);
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text);
   flex-shrink: 0;
 }
 .task-time-inline.due { color: var(--accent); }
-.task-title { word-break: break-word; font-size: 14px; font-weight: 600; color: var(--text); }
-.task-repeat-icon { font-size: 11px; color: var(--text-faint); flex-shrink: 0; }
+.task-title { word-break: break-word; font-size: 15.5px; font-weight: 600; color: var(--text); }
+.task-repeat-icon { font-size: 12px; color: var(--text-faint); flex-shrink: 0; }
 .task-row.done .task-title { text-decoration: line-through; color: var(--text-faint); }
-.task-notes { font-size: 12px; color: var(--text-soft); margin-top: 2px; word-break: break-word; }
+.task-notes { font-size: 13px; color: var(--text-soft); margin-top: 2px; word-break: break-word; }
 .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .task-cat-chip {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 999px;
   color: #fff;
 }
@@ -655,7 +660,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-faint);
   font-weight: 600;
   text-transform: uppercase;
@@ -664,7 +669,7 @@ html, body {
 .task-priority-dot.high { background: var(--red); }
 .task-priority-dot.medium { background: var(--amber); }
 .task-priority-dot.low { background: var(--accent-2); }
-.task-subtask-progress { font-size: 10px; color: var(--text-faint); font-family: var(--font-mono); }
+.task-subtask-progress { font-size: 11px; color: var(--text-faint); font-family: var(--font-mono); }
 
 .task-time-col {
   display: flex;
@@ -733,7 +738,7 @@ html, body {
   padding: 32px 16px 36px;
   text-align: center;
   color: var(--text-faint);
-  font-size: 13px;
+  font-size: 14px;
   display: none;
 }
 
@@ -1138,12 +1143,12 @@ html, body {
 }
 .view-tab {
   flex: 1;
-  padding: 8px 10px;
+  padding: 9px 11px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.03em;
   cursor: pointer;
@@ -1179,7 +1184,7 @@ html, body {
 }
 .week-day-title {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text);
   letter-spacing: 0.04em;
@@ -1188,13 +1193,13 @@ html, body {
 .week-day-meta { display: flex; align-items: center; gap: 8px; }
 .week-day-pct {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--accent);
   min-width: 32px;
   text-align: right;
 }
-.week-day-count { font-size: 11px; color: var(--text-faint); font-family: var(--font-mono); }
+.week-day-count { font-size: 12px; color: var(--text-faint); font-family: var(--font-mono); }
 .week-day-bar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; margin-bottom: 8px; }
 .week-day-bar > span { display: block; height: 100%; background: var(--green); border-radius: 2px; transition: width 200ms ease; }
 .week-day-tasks { display: flex; flex-direction: column; gap: 4px; }
@@ -1202,14 +1207,14 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
   padding: 4px 0;
 }
 .week-task-cat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .week-task-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .week-task-row.done .week-task-title { text-decoration: line-through; color: var(--text-faint); }
-.week-task-time { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--text-soft); flex-shrink: 0; }
-.week-day-empty { font-size: 12px; color: var(--text-faint); padding: 4px 0; }
+.week-task-time { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--text-soft); flex-shrink: 0; }
+.week-day-empty { font-size: 13px; color: var(--text-faint); padding: 4px 0; }
 
 /* ---------- Timeline view ---------- */
 .timeline-view {
@@ -1229,7 +1234,7 @@ html, body {
 .timeline-row:first-child { border-top: none; }
 .timeline-hour-label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-faint);
   padding: 4px 8px;
 }
@@ -1241,8 +1246,8 @@ html, body {
   background: var(--surface-2);
   border-left: 3px solid var(--cat-other);
   border-radius: 6px;
-  padding: 5px 8px;
-  font-size: 12px;
+  padding: 6px 9px;
+  font-size: 13px;
   cursor: pointer;
 }
 .timeline-task.cat-work { border-left-color: var(--cat-work); }
@@ -1260,10 +1265,10 @@ html, body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-soft);
 }
-.timeline-unscheduled strong { display: block; margin-bottom: 6px; color: var(--text); font-size: 11px; letter-spacing: 0.05em; }
+.timeline-unscheduled strong { display: block; margin-bottom: 6px; color: var(--text); font-size: 12px; letter-spacing: 0.05em; }
 
 /* ---------- Template picker (modal) ---------- */
 .template-row {
@@ -1498,12 +1503,12 @@ html, body {
   align-items: baseline;
   gap: 8px;
 }
-.day-detail-card-title { font-size: 14px; font-weight: 700; color: var(--text); word-break: break-word; }
+.day-detail-card-title { font-size: 15.5px; font-weight: 700; color: var(--text); word-break: break-word; }
 .day-detail-card-title.done { text-decoration: line-through; color: var(--text-faint); }
-.day-detail-card-time { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--text); flex-shrink: 0; white-space: nowrap; }
+.day-detail-card-time { font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: var(--text); flex-shrink: 0; white-space: nowrap; }
 .day-detail-card-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .day-detail-subtasks { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
-.day-detail-subtask-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.day-detail-subtask-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .day-detail-subtask-row input[type="checkbox"] { width: 15px; height: 15px; flex-shrink: 0; accent-color: var(--green); }
 .day-detail-subtask-row span { flex: 1; color: var(--text-soft); }
 .day-detail-subtask-row.done span { text-decoration: line-through; color: var(--text-faint); }
@@ -1538,6 +1543,8 @@ html, body {
       radial-gradient(1200px 500px at 50% -10%, rgba(255,122,26,0.08), transparent 60%),
       var(--bg-2);
   }
+
+  .app-footer { margin-top: auto; }
 
   .brand-header { padding: 34px 16px 12px; }
   .brand-logo { width: 68px; height: 68px; border-radius: 18px; }
