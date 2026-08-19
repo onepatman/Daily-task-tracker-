@@ -10,6 +10,47 @@
   const DAY_NAMES = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
   const FULL_DAY_NAMES = ["SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY"];
 
+  // ---------- Icons ----------
+  // Emoji render inconsistently across phone brands/OSes (different glyph
+  // sets, sizes, colors). A single inline-SVG set styled with currentColor
+  // looks identical everywhere and always matches surrounding text color.
+  const ICONS = {
+    moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+    download: '<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/>',
+    upload: '<path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/>',
+    sync: '<path d="M21 12a9 9 0 0 1-15.5 6.36L3 16"/><path d="M3 12a9 9 0 0 1 15.5-6.36L21 8"/><path d="M3 21v-5h5"/><path d="M21 3v5h-5"/>',
+    barChart: '<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M3 20h18"/>',
+    printer: '<path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7"/>',
+    bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+    bellOff: '<path d="M8.7 3a6 6 0 0 1 9.3 5c0 3.4.8 5.7 1.6 7.1"/><path d="M6.3 6.3C5.2 7.6 5 9.2 5 10c0 7-3 9-3 9h13"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="2" y1="2" x2="22" y2="22"/>',
+    close: '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>',
+    save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>',
+    trash: '<path d="M4 7h16"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/>',
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    checkbox: '<rect x="4" y="4" width="16" height="16" rx="3"/><polyline points="8 12 11 15 16 9"/>',
+    pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    repeat: '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
+    undo: '<polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>',
+    checkCircle: '<circle cx="12" cy="12" r="9"/><polyline points="8 12 11 15 16 9"/>',
+    alertTriangle: '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none"/>',
+    alarm: '<circle cx="12" cy="13" r="8"/><polyline points="12 9 12 13 15 15"/><path d="M5 3 2 6"/><path d="M22 6l-3-3"/>',
+    search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+    loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+  };
+  function iconSvg(name, extraClass) {
+    const inner = ICONS[name] || "";
+    return `<svg class="icon${extraClass ? " " + extraClass : ""}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${inner}</svg>`;
+  }
+  function hydrateIcons(root) {
+    (root || document).querySelectorAll("[data-icon]").forEach((el) => {
+      el.innerHTML = iconSvg(el.dataset.icon) + el.innerHTML;
+      delete el.dataset.icon;
+    });
+  }
+
   const CATEGORIES = {
     work:     { label: "Work",     color: "var(--cat-work)" },
     personal: { label: "Personal", color: "var(--cat-personal)" },
@@ -483,7 +524,7 @@
   // ---------- Theme ----------
   function applyTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
-    el.themeToggle.textContent = theme === "light" ? "☀️" : "🌙";
+    el.themeToggle.innerHTML = iconSvg(theme === "light" ? "sun" : "moon");
     el.themeToggle.setAttribute("aria-label", theme === "light" ? "Switch to dark theme" : "Switch to light theme");
     applyAccent(localStorage.getItem(ACCENT_KEY) || "orange");
   }
@@ -844,10 +885,10 @@
     actions.className = "task-row-actions";
     const completeHint = document.createElement("div");
     completeHint.className = "task-swipe-hint complete";
-    completeHint.textContent = done ? "↺ UNDO" : "✓ DONE";
+    completeHint.innerHTML = done ? iconSvg("undo") + " UNDO" : iconSvg("check") + " DONE";
     const deleteHint = document.createElement("div");
     deleteHint.className = "task-swipe-hint delete";
-    deleteHint.textContent = "DELETE 🗑";
+    deleteHint.innerHTML = "DELETE " + iconSvg("trash");
     actions.append(completeHint, deleteHint);
 
     const row = document.createElement("div");
@@ -862,7 +903,7 @@
     check.type = "button";
     check.className = "task-check";
     check.setAttribute("aria-checked", done ? "true" : "false");
-    check.textContent = done ? "✓" : "";
+    check.innerHTML = done ? iconSvg("check") : "";
     check.addEventListener("click", (e) => { e.stopPropagation(); toggleDone(task.id, dateKey); });
 
     const main = document.createElement("div");
@@ -877,7 +918,7 @@
     if (task.repeat !== "none") {
       const rep = document.createElement("span");
       rep.className = "task-repeat-icon";
-      rep.textContent = "🔁";
+      rep.innerHTML = iconSvg("repeat");
       titleRow.appendChild(rep);
     }
     main.appendChild(titleRow);
@@ -909,7 +950,7 @@
       const subDone = task.subtasks.filter((s) => s.done).length;
       const subProg = document.createElement("span");
       subProg.className = "task-subtask-progress";
-      subProg.textContent = `☑ ${subDone}/${task.subtasks.length}`;
+      subProg.innerHTML = iconSvg("checkbox") + ` ${subDone}/${task.subtasks.length}`;
       meta.appendChild(subProg);
     }
     main.appendChild(meta);
@@ -937,7 +978,7 @@
     editBtn.type = "button";
     editBtn.className = "task-edit-btn";
     editBtn.setAttribute("aria-label", "View task details");
-    editBtn.textContent = "✏️";
+    editBtn.innerHTML = iconSvg("pencil");
     editBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       openTaskDetail(task, dateKey);
@@ -1798,9 +1839,9 @@
     if (syncCode) {
       const statusLine = document.createElement("p");
       statusLine.className = "sync-status-line sync-status-" + syncStatus;
-      statusLine.textContent = syncStatus === "synced" ? "✅ Naka-sync"
-        : syncStatus === "connecting" ? "⏳ Kumokonekta..."
-        : "⚠️ May problema sa connection";
+      statusLine.innerHTML = syncStatus === "synced" ? iconSvg("checkCircle") + " Naka-sync"
+        : syncStatus === "connecting" ? iconSvg("loader") + " Kumokonekta..."
+        : iconSvg("alertTriangle") + " May problema sa connection";
       body.appendChild(statusLine);
 
       const codeBox = document.createElement("div");
@@ -1840,9 +1881,9 @@
 
       const pushStatusLine = document.createElement("p");
       pushStatusLine.className = "sync-status-line sync-status-" + (pushStatus === "on" ? "synced" : pushStatus === "error" ? "error" : "connecting");
-      pushStatusLine.textContent = pushStatus === "on" ? "🔔 Naka-on ang push notifications"
-        : pushStatus === "requesting" ? "⏳ Nire-request ang permission..."
-        : "🔕 Naka-off ang push notifications";
+      pushStatusLine.innerHTML = pushStatus === "on" ? iconSvg("bell") + " Naka-on ang push notifications"
+        : pushStatus === "requesting" ? iconSvg("loader") + " Nire-request ang permission..."
+        : iconSvg("bellOff") + " Naka-off ang push notifications";
       body.appendChild(pushStatusLine);
 
       const pushHint = document.createElement("p");
@@ -1865,7 +1906,7 @@
         pushBtn.addEventListener("click", disablePush);
       } else {
         pushBtn.className = "btn-solid sync-start-btn";
-        pushBtn.textContent = "🔔 I-enable ang push notifications";
+        pushBtn.innerHTML = iconSvg("bell") + " I-enable ang push notifications";
         pushBtn.disabled = pushStatus === "requesting";
         pushBtn.addEventListener("click", enablePush);
       }
@@ -2028,7 +2069,7 @@
       span.textContent = s.title;
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
-      removeBtn.textContent = "✕";
+      removeBtn.innerHTML = iconSvg("close");
       removeBtn.setAttribute("aria-label", "Remove subtask");
       removeBtn.addEventListener("click", () => { modalSubtasks.splice(idx, 1); renderSubtaskList(); });
       item.append(check, span, removeBtn);
@@ -2619,6 +2660,7 @@
   }
 
   // ---------- Init ----------
+  hydrateIcons();
   initTheme();
   populateMonthYearSelects();
   renderCategoryChips();
