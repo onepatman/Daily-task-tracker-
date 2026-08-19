@@ -3,6 +3,7 @@
 
   const STORAGE_KEY = "dailyLog.tasks.v1";
   const THEME_KEY = "dailyLog.theme";
+  const ACCENT_KEY = "dailyLog.accent";
   const TEMPLATES_KEY = "dailyLog.templates.v1";
   const MONTHS = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY",
     "AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
@@ -68,6 +69,7 @@
     todayBtn: document.getElementById("todayBtn"),
     sheetDateFull: document.getElementById("sheetDateFull"),
     themeToggle: document.getElementById("themeToggle"),
+    accentSwatches: document.getElementById("accentSwatches"),
     moreMenuBtn: document.getElementById("moreMenuBtn"),
     moreMenu: document.getElementById("moreMenu"),
     menuInstall: document.getElementById("menuInstall"),
@@ -450,6 +452,7 @@
     document.documentElement.setAttribute("data-theme", theme);
     el.themeToggle.textContent = theme === "light" ? "☀️" : "🌙";
     el.themeToggle.setAttribute("aria-label", theme === "light" ? "Switch to dark theme" : "Switch to light theme");
+    applyAccent(localStorage.getItem(ACCENT_KEY) || "orange");
   }
   function initTheme() {
     const saved = localStorage.getItem(THEME_KEY);
@@ -462,6 +465,46 @@
     localStorage.setItem(THEME_KEY, next);
     applyTheme(next);
   });
+
+  // ---------- Accent color ----------
+  const ACCENT_SWATCHES = [
+    { id: "orange", label: "Orange", dark: "#ff7a1a", light: "#e8600a" },
+    { id: "blue",   label: "Blue",   dark: "#4f9dff", light: "#1d6fe0" },
+    { id: "green",  label: "Green",  dark: "#34d399", light: "#16a34a" },
+    { id: "purple", label: "Purple", dark: "#b57bf2", light: "#8b3fd6" },
+    { id: "red",    label: "Red",    dark: "#f76e6e", light: "#dc2626" },
+    { id: "teal",   label: "Teal",   dark: "#45c6f5", light: "#0891b2" },
+    { id: "pink",   label: "Pink",   dark: "#f472b6", light: "#db2777" },
+  ];
+  function relLuminance(hex) {
+    const [r, g, b] = hex.replace("#", "").match(/.{2}/g)
+      .map((h) => parseInt(h, 16) / 255)
+      .map((c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+  function pickOnAccent(hex) {
+    return relLuminance(hex) > 0.3 ? "#12202f" : "#ffffff";
+  }
+  function applyAccent(id) {
+    const swatch = ACCENT_SWATCHES.find((s) => s.id === id) || ACCENT_SWATCHES[0];
+    const theme = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    const hex = swatch[theme];
+    document.documentElement.style.setProperty("--accent", hex);
+    document.documentElement.style.setProperty("--on-accent", pickOnAccent(hex));
+    if (el.accentSwatches) {
+      el.accentSwatches.querySelectorAll(".accent-swatch").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.accent === swatch.id);
+      });
+    }
+  }
+  if (el.accentSwatches) {
+    el.accentSwatches.querySelectorAll(".accent-swatch").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        localStorage.setItem(ACCENT_KEY, btn.dataset.accent);
+        applyAccent(btn.dataset.accent);
+      });
+    });
+  }
 
   // ---------- More menu ----------
   function openMoreMenu() {
