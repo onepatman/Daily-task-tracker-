@@ -270,11 +270,16 @@ html, body {
 
 /* ---------- View tabs row + status badge ---------- */
 .view-tabs-row {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 12px 16px 0;
+  padding: 12px 16px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
 }
 .view-status-badge {
   flex-shrink: 0;
@@ -1602,7 +1607,16 @@ html, body {
   .app-main .week-view { margin: 14px 0 0; }
   .app-main .timeline-view { margin: 14px 0 0; }
 
-  .view-tabs-row { padding: 18px 28px 0; max-width: 520px; }
+  .view-tabs-row {
+    /* The desktop dashboard already has its own sticky sidebar (calendar
+       etc.); stacking a second sticky element here would fight it for the
+       same top-of-viewport space, so this row just scrolls normally. */
+    position: static;
+    padding: 18px 28px 10px;
+    max-width: 520px;
+    background: none;
+    border-bottom: none;
+  }
   .view-tab { font-size: 15px; padding: 12px 17px; }
   .view-status-badge { font-size: 13px; padding: 10px 15px; }
 
