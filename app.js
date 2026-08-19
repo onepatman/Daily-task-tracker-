@@ -292,6 +292,39 @@
       if (value) task.completions[dateKey] = true;
       else delete task.completions[dateKey];
     }
+    checkDayCelebration(dateKey);
+  }
+
+  // ---------- Completion celebration ----------
+  const celebratedDates = new Set();
+  function checkDayCelebration(dateKey) {
+    const list = tasksForDate(dateKey);
+    if (!list.length) { celebratedDates.delete(dateKey); return; }
+    const allDone = list.every((t) => isDoneOn(t, dateKey));
+    if (!allDone) { celebratedDates.delete(dateKey); return; }
+    if (celebratedDates.has(dateKey)) return;
+    celebratedDates.add(dateKey);
+    if (dateKey === selectedDate) {
+      triggerConfetti();
+      showSnackbar("🎉 All tasks done for today!", null);
+    }
+  }
+  function triggerConfetti() {
+    const colors = ["#ff7a1a", "#45c6f5", "#34d399", "#f76e6e", "#b57bf2", "#fbbf24"];
+    const burst = document.createElement("div");
+    burst.className = "confetti-burst";
+    for (let i = 0; i < 26; i++) {
+      const piece = document.createElement("span");
+      piece.className = "confetti-piece";
+      piece.style.left = `${40 + Math.random() * 20}%`;
+      piece.style.background = colors[i % colors.length];
+      piece.style.setProperty("--x", `${(Math.random() - 0.5) * 260}px`);
+      piece.style.setProperty("--rot", `${(Math.random() - 0.5) * 720}deg`);
+      piece.style.setProperty("--delay", `${Math.random() * 150}ms`);
+      burst.appendChild(piece);
+    }
+    document.body.appendChild(burst);
+    setTimeout(() => burst.remove(), 1500);
   }
   function isNotifiedOn(task, dateKey) {
     return task.repeat === "none" ? !!task.notified : !!(task.notifiedDates && task.notifiedDates[dateKey]);
