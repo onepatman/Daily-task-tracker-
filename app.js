@@ -567,6 +567,7 @@
 
   // ---------- View tabs (Day / Week / Timeline) ----------
   function setView(view) {
+    const changed = view !== currentView;
     currentView = view;
     el.viewTabs.querySelectorAll(".view-tab").forEach((tab) => {
       const active = tab.dataset.view === view;
@@ -576,6 +577,12 @@
     el.dayView.hidden = view !== "day";
     el.weekView.hidden = view !== "week";
     el.timelineView.hidden = view !== "timeline";
+    if (changed) {
+      const activeEl = view === "day" ? el.dayView : view === "week" ? el.weekView : el.timelineView;
+      activeEl.classList.remove("view-entering");
+      void activeEl.offsetWidth; // restart the animation even if it's still playing
+      activeEl.classList.add("view-entering");
+    }
     updateViewStatusBadge();
     renderCurrentView();
   }
