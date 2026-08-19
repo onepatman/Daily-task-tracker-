@@ -372,12 +372,30 @@ html, body {
 .cal-day.blank { visibility: hidden; cursor: default; }
 .cal-day.today { border-color: var(--accent-2); color: var(--text); }
 .cal-day.selected { background: var(--accent); color: var(--on-accent); font-weight: 700; border-color: var(--accent); }
-.cal-day .dot {
-  width: 4px; height: 4px; border-radius: 50%;
-  background: var(--accent);
+.cal-day-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   margin-top: 3px;
+  height: 5px;
 }
-.cal-day.selected .dot { background: var(--on-accent); }
+.cal-day-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--dot-color, var(--accent));
+  flex-shrink: 0;
+}
+.cal-day-dot.more {
+  width: auto; height: auto;
+  font-size: 8px;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--text-faint);
+  background: none;
+  border-radius: 0;
+}
+.cal-day.selected .cal-day-dot { background: var(--on-accent); }
+.cal-day.selected .cal-day-dot.more { color: var(--on-accent); }
 
 .calendar-toggle, .insights-toggle {
   display: block;

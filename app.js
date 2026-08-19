@@ -574,10 +574,23 @@
       num.textContent = String(day);
       btn.appendChild(num);
 
-      if (tasksForDate(key).length > 0) {
-        const dot = document.createElement("span");
-        dot.className = "dot";
-        btn.appendChild(dot);
+      const dayTasks = tasksForDate(key);
+      if (dayTasks.length > 0) {
+        const dotsWrap = document.createElement("span");
+        dotsWrap.className = "cal-day-dots";
+        const cats = [...new Set(dayTasks.map((t) => t.category || "other"))];
+        cats.slice(0, 3).forEach((cat, i) => {
+          const dot = document.createElement("span");
+          if (i === 2 && cats.length > 3) {
+            dot.className = "cal-day-dot more";
+            dot.textContent = `+${cats.length - 2}`;
+          } else {
+            dot.className = "cal-day-dot";
+            dot.style.setProperty("--dot-color", (CATEGORIES[cat] || CATEGORIES.other).color);
+          }
+          dotsWrap.appendChild(dot);
+        });
+        btn.appendChild(dotsWrap);
       }
 
       btn.addEventListener("click", () => {
