@@ -1163,6 +1163,40 @@ html, body {
 }
 .more-menu button:hover, .more-menu button:active { background: var(--surface-2); }
 
+.menu-accent-row {
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 4px;
+}
+.menu-accent-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+.accent-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.more-menu .accent-swatch {
+  display: block;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: 0 0 0 1px var(--border-soft) inset;
+  cursor: pointer;
+}
+.more-menu .accent-swatch[data-accent="orange"] { background: #ff7a1a; }
+.more-menu .accent-swatch[data-accent="blue"] { background: #4f9dff; }
+.more-menu .accent-swatch[data-accent="green"] { background: #34d399; }
+.more-menu .accent-swatch[data-accent="purple"] { background: #b57bf2; }
+.more-menu .accent-swatch[data-accent="red"] { background: #f76e6e; }
+.more-menu .accent-swatch[data-accent="teal"] { background: #45c6f5; }
+.more-menu .accent-swatch[data-accent="pink"] { background: #f472b6; }
+.more-menu .accent-swatch.active { border-color: var(--text); }
+
 /* ---------- View tabs ---------- */
 .view-tabs {
   display: flex;
