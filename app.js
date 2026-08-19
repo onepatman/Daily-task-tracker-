@@ -143,7 +143,11 @@
     dayView: document.getElementById("dayView"),
     weekView: document.getElementById("weekView"),
     timelineView: document.getElementById("timelineView"),
-    printDate: document.getElementById("printDate"),
+    printSheetTitle: document.getElementById("printSheetTitle"),
+    printPeriod: document.getElementById("printPeriod"),
+    printGenerated: document.getElementById("printGenerated"),
+    printCompletion: document.getElementById("printCompletion"),
+    printSheetBody: document.getElementById("printSheetBody"),
     taskList: document.getElementById("taskList"),
     emptyState: document.getElementById("emptyState"),
     addTaskBtn: document.getElementById("addTaskBtn"),
@@ -801,7 +805,6 @@
     const dateObj = parseDateKey(selectedDate);
     const fullDateStr = `${FULL_DAY_NAMES[dateObj.getDay()]}, ${MONTHS[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
     el.sheetDateFull.textContent = fullDateStr;
-    el.printDate.textContent = fullDateStr;
     updateViewStatusBadge();
   }
   function updateViewStatusBadge() {
@@ -1972,9 +1975,106 @@
   }
 
   // ---------- Print ----------
+  function buildPrintRow(task, dateKey, index) {
+    const done = isDoneOn(task, dateKey);
+    const cat = CATEGORIES[task.category] || CATEGORIES.other;
+    const pri = PRIORITIES[task.priority] || PRIORITIES.medium;
+    const tr = document.createElement("tr");
+    if (done) tr.className = "pc-done";
+
+    const tdNo = document.createElement("td");
+    tdNo.className = "pc-no";
+    tdNo.textContent = String(index).padStart(2, "0");
+
+    const tdTask = document.createElement("td");
+    tdTask.className = "pc-task";
+    tdTask.textContent = task.title;
+    if (task.notes) {
+      const notes = document.createElement("div");
+      notes.className = "pc-notes";
+      notes.textContent = task.notes;
+      tdTask.appendChild(notes);
+    }
+
+    const tdCat = document.createElement("td");
+    tdCat.className = "pc-cat";
+    tdCat.textContent = cat.label;
+
+    const tdPri = document.createElement("td");
+    tdPri.className = "pc-pri";
+    tdPri.textContent = pri.label;
+
+    const tdTime = document.createElement("td");
+    tdTime.className = "pc-time";
+    tdTime.textContent = task.time ? timeRangeLabel(task) : "—";
+
+    const tdStatus = document.createElement("td");
+    tdStatus.className = "pc-status";
+    tdStatus.textContent = done ? "DONE" : "OPEN";
+
+    tr.append(tdNo, tdTask, tdCat, tdPri, tdTime, tdStatus);
+    return tr;
+  }
+  function buildPrintDayGroupRow(dateKey) {
+    const tr = document.createElement("tr");
+    tr.className = "pc-day-group";
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.textContent = formatDateDisplay(dateKey).toUpperCase();
+    tr.appendChild(td);
+    return tr;
+  }
+  function buildPrintSheet() {
+    el.printSheetBody.innerHTML = "";
+    const now = new Date();
+    el.printGenerated.textContent = `${MONTHS[now.getMonth()].slice(0, 3)} ${now.getDate()}, ${now.getFullYear()} ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+
+    let allTasks = [];
+    if (currentView === "week") {
+      const weekStart = getWeekStart(selectedDate);
+      el.printSheetTitle.textContent = "Weekly Task Log";
+      const startKey = toDateKey(weekStart);
+      const endDate = new Date(weekStart); endDate.setDate(endDate.getDate() + 6);
+      el.printPeriod.textContent = `${formatDateDisplay(startKey)} – ${formatDateDisplay(toDateKey(endDate))}`;
+      let index = 1;
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(weekStart); d.setDate(d.getDate() + i);
+        const dateKey = toDateKey(d);
+        const dayTasks = tasksForDate(dateKey).slice().sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
+        if (!dayTasks.length) continue;
+        el.printSheetBody.appendChild(buildPrintDayGroupRow(dateKey));
+        dayTasks.forEach((t) => {
+          el.printSheetBody.appendChild(buildPrintRow(t, dateKey, index++));
+          allTasks.push({ t, dateKey });
+        });
+      }
+    } else {
+      el.printSheetTitle.textContent = "Daily Task Log";
+      el.printPeriod.textContent = formatDateDisplay(selectedDate);
+      const dayTasks = tasksForDate(selectedDate).slice().sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
+      dayTasks.forEach((t, i) => {
+        el.printSheetBody.appendChild(buildPrintRow(t, selectedDate, i + 1));
+        allTasks.push({ t, dateKey: selectedDate });
+      });
+    }
+
+    if (!allTasks.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 6;
+      td.className = "pc-empty";
+      td.textContent = "No tasks logged for this period.";
+      tr.appendChild(td);
+      el.printSheetBody.appendChild(tr);
+      el.printCompletion.textContent = "—";
+    } else {
+      const done = allTasks.filter(({ t, dateKey }) => isDoneOn(t, dateKey)).length;
+      el.printCompletion.textContent = `${done}/${allTasks.length} completed`;
+    }
+  }
   el.menuPrint.addEventListener("click", () => {
     closeMoreMenu();
-    if (currentView !== "day") setView("day");
+    buildPrintSheet();
     window.print();
   });
 

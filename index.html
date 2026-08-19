@@ -120,11 +120,6 @@
     </aside>
 
     <div class="app-main">
-      <div class="print-header">
-        <h1>Daily Log</h1>
-        <p id="printDate"></p>
-      </div>
-
       <section class="toolbar" id="toolbar">
         <div class="toolbar-search">
           <span class="toolbar-search-icon" data-icon="search"></span>
@@ -173,6 +168,36 @@
 
   <button class="fab" id="addTaskBtn" aria-label="Log new task">+</button>
   <button class="install-btn" id="installBtn" hidden>APPROVED FOR FIELD USE — Install App</button>
+</div>
+
+<div class="print-sheet" id="printSheet">
+  <div class="print-sheet-brand">
+    <span class="print-sheet-brand-name">Daily Task Tracker &amp; Planner</span>
+    <span class="print-sheet-brand-tag">Field Task Log</span>
+  </div>
+  <h1 class="print-sheet-title" id="printSheetTitle">—</h1>
+  <div class="print-sheet-meta">
+    <div><span>Period</span><strong id="printPeriod">—</strong></div>
+    <div><span>Generated</span><strong id="printGenerated">—</strong></div>
+    <div><span>Completion</span><strong id="printCompletion">—</strong></div>
+  </div>
+  <table class="print-sheet-table" id="printSheetTable">
+    <thead>
+      <tr>
+        <th class="pc-no">No.</th>
+        <th class="pc-task">Task Description</th>
+        <th class="pc-cat">Category</th>
+        <th class="pc-pri">Priority</th>
+        <th class="pc-time">Time</th>
+        <th class="pc-status">Status</th>
+      </tr>
+    </thead>
+    <tbody id="printSheetBody"></tbody>
+  </table>
+  <div class="print-sheet-footer">
+    <div class="print-sign-block"><span class="print-sign-label">Prepared by</span><span class="print-sign-line"></span></div>
+    <div class="print-sign-block"><span class="print-sign-label">Reviewed / Approved by</span><span class="print-sign-line"></span></div>
+  </div>
 </div>
 
 <div class="reminder-banner" id="reminderBanner" role="alert" hidden>
