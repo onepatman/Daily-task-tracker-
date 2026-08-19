@@ -52,6 +52,24 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+
+/* ---------- Icons ----------
+   Inline SVG instead of emoji: emoji render as a different glyph set on
+   every phone brand/OS (colors, weights, even shapes vary), which reads
+   as inconsistent especially side by side with the app's own typography.
+   currentColor means each icon always matches its surrounding text/button
+   color automatically, no per-instance color tweaking needed. */
+.icon {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
