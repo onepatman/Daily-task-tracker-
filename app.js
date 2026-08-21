@@ -142,6 +142,7 @@
     closeSyncOverlay: document.getElementById("closeSyncOverlay"),
     menuWeeklyReview: document.getElementById("menuWeeklyReview"),
     menuPrint: document.getElementById("menuPrint"),
+    menuExportIcs: document.getElementById("menuExportIcs"),
     menuExportJson: document.getElementById("menuExportJson"),
     menuExportCsv: document.getElementById("menuExportCsv"),
     menuImport: document.getElementById("menuImport"),
@@ -2318,6 +2319,73 @@
     if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
     return s;
   }
+  // ---------- .ics calendar export ----------
+  function icsEscapeText(s) {
+    return String(s == null ? "" : s)
+      .replace(/\\/g, "\\\\")
+      .replace(/;/g, "\\;")
+      .replace(/,/g, "\\,")
+      .replace(/\n/g, "\\n");
+  }
+  function icsFoldLine(line) {
+    if (line.length <= 75) return line;
+    let out = line.slice(0, 75);
+    let rest = line.slice(75);
+    while (rest.length > 0) {
+      out += "\r\n " + rest.slice(0, 74);
+      rest = rest.slice(74);
+    }
+    return out;
+  }
+  function icsDateStamp(dateKey) {
+    return dateKey.replace(/-/g, "");
+  }
+  function icsTimeStamp(time) {
+    const [h, m] = time.split(":").map(Number);
+    return String(h).padStart(2, "0") + String(m).padStart(2, "0") + "00";
+  }
+  function buildIcsEvent(task) {
+    const lines = ["BEGIN:VEVENT", "UID:" + task.id + "@dailytasktracker"];
+    const now = new Date();
+    const dtstamp = now.getUTCFullYear() + String(now.getUTCMonth() + 1).padStart(2, "0") + String(now.getUTCDate()).padStart(2, "0")
+      + "T" + String(now.getUTCHours()).padStart(2, "0") + String(now.getUTCMinutes()).padStart(2, "0") + String(now.getUTCSeconds()).padStart(2, "0") + "Z";
+    lines.push("DTSTAMP:" + dtstamp);
+    const dateStr = icsDateStamp(task.startDate);
+    if (task.time) {
+      lines.push("DTSTART:" + dateStr + "T" + icsTimeStamp(task.time));
+      lines.push("DTEND:" + dateStr + "T" + icsTimeStamp(task.endTime || task.time));
+    } else {
+      lines.push("DTSTART;VALUE=DATE:" + dateStr);
+    }
+    if (task.repeat === "daily") lines.push("RRULE:FREQ=DAILY");
+    else if (task.repeat === "weekly") lines.push("RRULE:FREQ=WEEKLY");
+    else if (task.repeat === "weekdays") lines.push("RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
+    if (task.repeat !== "none" && task.skipped) {
+      const exKeys = Object.keys(task.skipped).filter((k) => task.skipped[k]);
+      if (exKeys.length) {
+        const exVals = exKeys.map((k) => task.time ? icsDateStamp(k) + "T" + icsTimeStamp(task.time) : icsDateStamp(k));
+        lines.push((task.time ? "EXDATE:" : "EXDATE;VALUE=DATE:") + exVals.join(","));
+      }
+    }
+    lines.push("SUMMARY:" + icsEscapeText(task.title));
+    if (task.notes) lines.push("DESCRIPTION:" + icsEscapeText(task.notes));
+    const priorityMap = { high: 1, medium: 5, low: 9 };
+    lines.push("PRIORITY:" + (priorityMap[task.priority] || 5));
+    lines.push("CATEGORIES:" + icsEscapeText((CATEGORIES[task.category] || CATEGORIES.other).label));
+    lines.push("STATUS:CONFIRMED");
+    lines.push("END:VEVENT");
+    return lines;
+  }
+  function buildIcsCalendar(taskList) {
+    const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Daily Task Tracker & Planner//EN", "CALSCALE:GREGORIAN"];
+    taskList.forEach((t) => { lines.push(...buildIcsEvent(t)); });
+    lines.push("END:VCALENDAR");
+    return lines.map(icsFoldLine).join("\r\n") + "\r\n";
+  }
+  el.menuExportIcs.addEventListener("click", () => {
+    closeMoreMenu();
+    downloadBlob(`daily-log-export-${toDateKey(today)}.ics`, buildIcsCalendar(tasks), "text/calendar");
+  });
   el.menuExportJson.addEventListener("click", () => {
     closeMoreMenu();
     downloadBlob(`daily-log-export-${toDateKey(today)}.json`, JSON.stringify(tasks, null, 2), "application/json");
