@@ -211,6 +211,19 @@ html, body {
   margin-top: 10px;
 }
 .tb-nav-right { display: flex; align-items: center; gap: 8px; }
+.tb-nav-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sync-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.sync-status-pill .icon { width: 12px; height: 12px; }
+.icon-spin { animation: icon-spin 900ms linear infinite; }
+@keyframes icon-spin { to { transform: rotate(360deg); } }
 .tb-arrow, .tb-icon-btn {
   background: var(--surface);
   border: 1px solid var(--border);
