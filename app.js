@@ -1341,6 +1341,17 @@
 
     const head = document.createElement("div");
     head.className = "day-detail-card-head";
+    const check = document.createElement("button");
+    check.type = "button";
+    check.className = "task-check";
+    check.setAttribute("aria-checked", done ? "true" : "false");
+    check.setAttribute("aria-label", done ? "Mark as not done" : "Mark as done");
+    check.innerHTML = done ? iconSvg("check") : "";
+    check.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleDone(task.id, dateKey);
+    });
+    head.appendChild(check);
     if (task.time) {
       const time = document.createElement("span");
       time.className = "day-detail-card-time";
@@ -1367,7 +1378,27 @@
     priDot.className = "task-priority-dot " + task.priority;
     pri.append(priDot, document.createTextNode(task.priority));
     meta.appendChild(pri);
+    if (task.repeat && task.repeat !== "none") {
+      const rep = document.createElement("span");
+      rep.className = "task-priority";
+      rep.innerHTML = iconSvg("repeat") + " " + task.repeat;
+      meta.appendChild(rep);
+    }
+    if (task.subtasks && task.subtasks.length) {
+      const subCount = document.createElement("span");
+      subCount.className = "task-priority";
+      const doneCount = task.subtasks.filter((s) => s.done).length;
+      subCount.textContent = `${doneCount}/${task.subtasks.length} subtasks`;
+      meta.appendChild(subCount);
+    }
     card.appendChild(meta);
+
+    if (task.notes) {
+      const notes = document.createElement("div");
+      notes.className = "task-notes day-detail-card-notes";
+      notes.textContent = task.notes;
+      card.appendChild(notes);
+    }
 
     if (task.subtasks && task.subtasks.length) {
       const subWrap = document.createElement("div");
