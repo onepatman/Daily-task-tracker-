@@ -41,6 +41,7 @@
     search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
     loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
     monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+    camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/>',
   };
   function iconSvg(name, extraClass) {
     const inner = ICONS[name] || "";
@@ -105,6 +106,7 @@
   let editingTask = null;
   let editingDateKey = null;
   let modalSubtasks = [];
+  let modalPhoto = "";
   let pendingUndo = null;
   let snackbarTimer = null;
   let activeReminderTask = null;
@@ -215,6 +217,10 @@
     taskRepeat: document.getElementById("taskRepeat"),
     taskReminder: document.getElementById("taskReminder"),
     taskNotes: document.getElementById("taskNotes"),
+    taskPhotoPreview: document.getElementById("taskPhotoPreview"),
+    addPhotoBtn: document.getElementById("addPhotoBtn"),
+    removePhotoBtn: document.getElementById("removePhotoBtn"),
+    taskPhotoInput: document.getElementById("taskPhotoInput"),
     subtaskFieldProgress: document.getElementById("subtaskFieldProgress"),
     subtaskList: document.getElementById("subtaskList"),
     subtaskInput: document.getElementById("subtaskInput"),
@@ -1118,6 +1124,12 @@
       subProg.innerHTML = iconSvg("checkbox") + ` ${subDone}/${task.subtasks.length}`;
       meta.appendChild(subProg);
     }
+    if (task.photo) {
+      const photoBadge = document.createElement("span");
+      photoBadge.className = "task-subtask-progress";
+      photoBadge.innerHTML = iconSvg("camera");
+      meta.appendChild(photoBadge);
+    }
     main.appendChild(meta);
 
     if (task.subtasks && task.subtasks.length) {
@@ -1496,6 +1508,14 @@
       notes.className = "task-notes day-detail-card-notes";
       notes.textContent = task.notes;
       card.appendChild(notes);
+    }
+
+    if (task.photo) {
+      const photo = document.createElement("img");
+      photo.className = "day-detail-card-photo";
+      photo.src = task.photo;
+      photo.alt = "Attached photo for " + task.title;
+      card.appendChild(photo);
     }
 
     if (task.subtasks && task.subtasks.length) {
@@ -2722,6 +2742,62 @@
     el.deleteTemplateBtn.hidden = true;
   });
 
+  // ---------- Photo attachment (modal) ----------
+  function compressImageFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error("Could not read image"));
+        img.onload = () => {
+          const MAX_DIM = 800;
+          let { width, height } = img;
+          if (width > MAX_DIM || height > MAX_DIM) {
+            if (width > height) { height = Math.round(height * (MAX_DIM / width)); width = MAX_DIM; }
+            else { width = Math.round(width * (MAX_DIM / height)); height = MAX_DIM; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.6));
+        };
+        img.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  function renderPhotoField() {
+    if (modalPhoto) {
+      el.taskPhotoPreview.src = modalPhoto;
+      el.taskPhotoPreview.hidden = false;
+      el.addPhotoBtn.hidden = true;
+      el.removePhotoBtn.hidden = false;
+    } else {
+      el.taskPhotoPreview.hidden = true;
+      el.taskPhotoPreview.src = "";
+      el.addPhotoBtn.hidden = false;
+      el.removePhotoBtn.hidden = true;
+    }
+  }
+  el.addPhotoBtn.addEventListener("click", () => el.taskPhotoInput.click());
+  el.taskPhotoInput.addEventListener("change", async () => {
+    const file = el.taskPhotoInput.files[0];
+    el.taskPhotoInput.value = "";
+    if (!file) return;
+    try {
+      modalPhoto = await compressImageFile(file);
+      renderPhotoField();
+    } catch (e) {
+      showSnackbar("Could not attach that photo");
+    }
+  });
+  el.removePhotoBtn.addEventListener("click", () => {
+    modalPhoto = "";
+    renderPhotoField();
+  });
+
   // ---------- Modal ----------
   function openCreateModal() {
     editingTask = null;
@@ -2729,6 +2805,8 @@
     el.taskForm.reset();
     modalSubtasks = [];
     renderSubtaskList();
+    modalPhoto = "";
+    renderPhotoField();
     el.modalTitle.textContent = "Log Item";
     el.taskDate.value = selectedDate;
     el.taskDateDisplay.textContent = formatDateDisplay(selectedDate);
@@ -2767,6 +2845,8 @@
     el.taskNotes.value = task.notes || "";
     modalSubtasks = (task.subtasks || []).map((s) => ({ ...s }));
     renderSubtaskList();
+    modalPhoto = task.photo || "";
+    renderPhotoField();
     el.modalTitle.textContent = "Edit Item";
     el.templateRow.hidden = true;
     closeDatePicker();
@@ -2802,13 +2882,14 @@
     const notes = el.taskNotes.value.trim();
     const repeat = el.taskRepeat.value;
     const subtasks = modalSubtasks.map((s) => ({ id: s.id, title: s.title, done: !!s.done }));
+    const photo = modalPhoto;
 
     if (editingTask) {
-      Object.assign(editingTask, { title, category, priority, time, endTime, reminder, notes, repeat, subtasks, startDate });
+      Object.assign(editingTask, { title, category, priority, time, endTime, reminder, notes, repeat, subtasks, startDate, photo });
     } else {
       tasks.push({
         id: uid(),
-        title, category, priority, time, endTime, reminder, notes, subtasks,
+        title, category, priority, time, endTime, reminder, notes, subtasks, photo,
         repeat,
         startDate,
         done: false,
