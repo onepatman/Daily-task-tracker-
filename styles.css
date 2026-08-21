@@ -907,21 +907,24 @@ html, body {
   padding: 0;
 }
 .task-delete-btn:active { background: color-mix(in srgb, var(--red) 20%, var(--surface-2)); }
-.task-drag-handle {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-faint);
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  cursor: grab;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
+
+.reschedule-drag-ghost {
+  position: fixed;
+  z-index: 200;
+  transform: translate(-50%, -140%);
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.task-drag-handle .icon { width: 13px; height: 13px; }
-.task-drag-handle:active { cursor: grabbing; background: var(--border); }
 
 .subtask-progress-bar {
   margin-top: 8px;
