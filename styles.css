@@ -494,6 +494,11 @@ html, body {
 }
 .cal-day.selected .cal-day-dot { background: var(--on-accent); }
 .cal-day.selected .cal-day-dot.more { color: var(--on-accent); }
+.cal-day.drag-over {
+  background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+  border-color: var(--accent);
+  transform: scale(1.06);
+}
 
 .calendar-toggle, .insights-toggle {
   display: block;
@@ -872,6 +877,21 @@ html, body {
   padding: 0;
 }
 .task-edit-btn:active { background: var(--border); }
+.task-drag-handle {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.task-drag-handle .icon { width: 13px; height: 13px; }
+.task-drag-handle:active { cursor: grabbing; background: var(--border); }
 
 .subtask-progress-bar {
   margin-top: 8px;

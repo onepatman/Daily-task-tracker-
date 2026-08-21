@@ -122,6 +122,7 @@
   let dayDetailTask = null;
   let selectMode = false;
   const selectedTaskIds = new Set();
+  let draggedTaskId = null;
 
   // ---------- Elements ----------
   const el = {
@@ -867,6 +868,18 @@
         selectedDate = key;
         renderAll();
       });
+      btn.addEventListener("dragover", (e) => {
+        if (!draggedTaskId) return;
+        e.preventDefault();
+        btn.classList.add("drag-over");
+      });
+      btn.addEventListener("dragleave", () => btn.classList.remove("drag-over"));
+      btn.addEventListener("drop", (e) => {
+        e.preventDefault();
+        btn.classList.remove("drag-over");
+        const id = e.dataTransfer.getData("text/plain") || draggedTaskId;
+        if (id) rescheduleTask(id, key);
+      });
       el.calendarGrid.appendChild(btn);
     }
   }
@@ -1164,6 +1177,28 @@
     });
     timeCol.appendChild(editBtn);
 
+    if (!selectMode) {
+      const dragHandle = document.createElement("button");
+      dragHandle.type = "button";
+      dragHandle.className = "task-drag-handle";
+      dragHandle.draggable = true;
+      dragHandle.setAttribute("aria-label", "Drag to a date on the calendar to reschedule");
+      dragHandle.title = "Drag to a date on the calendar to reschedule";
+      dragHandle.innerHTML = iconSvg("calendar");
+      dragHandle.addEventListener("click", (e) => e.stopPropagation());
+      dragHandle.addEventListener("dragstart", (e) => {
+        draggedTaskId = task.id;
+        row.classList.add("dragging");
+        e.dataTransfer.setData("text/plain", task.id);
+        e.dataTransfer.effectAllowed = "move";
+      });
+      dragHandle.addEventListener("dragend", () => {
+        row.classList.remove("dragging");
+        draggedTaskId = null;
+      });
+      timeCol.appendChild(dragHandle);
+    }
+
     if (task.time) {
       const timeRow = document.createElement("div");
       timeRow.className = "task-time-row";
@@ -1231,11 +1266,15 @@
   function attachDrag(row, task) {
     row.addEventListener("dragstart", (e) => {
       if (!isManualSort()) { e.preventDefault(); return; }
+      draggedTaskId = task.id;
       row.classList.add("dragging");
       e.dataTransfer.setData("text/plain", task.id);
       e.dataTransfer.effectAllowed = "move";
     });
-    row.addEventListener("dragend", () => row.classList.remove("dragging"));
+    row.addEventListener("dragend", () => {
+      row.classList.remove("dragging");
+      draggedTaskId = null;
+    });
     row.addEventListener("dragover", (e) => {
       if (!isManualSort()) return;
       e.preventDefault();
@@ -1247,6 +1286,30 @@
       if (draggedId === task.id) return;
       reorderTasks(draggedId, task.id);
     });
+  }
+
+  function rescheduleTask(id, newDateKey) {
+    const task = tasks.find((t) => t.id === id);
+    if (!task || task.startDate === newDateKey) return;
+    const oldDate = task.startDate;
+    const doMove = () => {
+      task.startDate = newDateKey;
+      saveTasks();
+      renderAll();
+      showSnackbar(`"${task.title}" moved to ${formatDateDisplay(newDateKey)}`, () => {
+        task.startDate = oldDate;
+        saveTasks();
+        renderAll();
+      });
+    };
+    if (task.repeat !== "none") {
+      showConfirm(`"${task.title}" repeats. Move the whole series to start on ${formatDateDisplay(newDateKey)}?`, [
+        { label: "Move series", onClick: doMove },
+        { label: "Cancel", cancel: true },
+      ]);
+    } else {
+      doMove();
+    }
   }
 
   function reorderTasks(draggedId, targetId) {
