@@ -5,6 +5,7 @@
   const THEME_KEY = "dailyLog.theme";
   const ACCENT_KEY = "dailyLog.accent";
   const TEMPLATES_KEY = "dailyLog.templates.v1";
+  const FILTERS_KEY = "dailyLog.filters";
   const MONTHS = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY",
     "AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
   const DAY_NAMES = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
@@ -83,6 +84,22 @@
   let activeCategories = new Set();
   let activePriorities = new Set();
   let sortMode = "time";
+  function saveFilters() {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify({
+      categories: [...activeCategories],
+      priorities: [...activePriorities],
+      sort: sortMode,
+    }));
+  }
+  function loadFilters() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(FILTERS_KEY) || "null");
+      if (!saved) return;
+      if (Array.isArray(saved.categories)) activeCategories = new Set(saved.categories);
+      if (Array.isArray(saved.priorities)) activePriorities = new Set(saved.priorities);
+      if (typeof saved.sort === "string") sortMode = saved.sort;
+    } catch (e) { /* ignore malformed saved filters */ }
+  }
   let currentView = "day"; // 'day' | 'week' | 'timeline'
   let editingTask = null;
   let editingDateKey = null;
@@ -793,11 +810,11 @@
   }
   function renderCategoryChips() {
     const opts = Object.entries(CATEGORIES).map(([key, info]) => ({ key, label: info.label, color: info.color }));
-    renderChipGroup(el.categoryChips, opts, activeCategories, renderCurrentView);
+    renderChipGroup(el.categoryChips, opts, activeCategories, () => { saveFilters(); renderCurrentView(); });
   }
   function renderPriorityChips() {
     const opts = Object.entries(PRIORITIES).map(([key, info]) => ({ key, label: info.label, color: info.color }));
-    renderChipGroup(el.priorityChips, opts, activePriorities, renderCurrentView);
+    renderChipGroup(el.priorityChips, opts, activePriorities, () => { saveFilters(); renderCurrentView(); });
   }
 
   // ---------- Sheet header (date/status), shared across views ----------
@@ -2143,6 +2160,7 @@
   });
   el.sortSelect.addEventListener("change", () => {
     sortMode = el.sortSelect.value;
+    saveFilters();
     renderCurrentView();
   });
 
@@ -2762,6 +2780,8 @@
   // ---------- Init ----------
   hydrateIcons();
   initTheme();
+  loadFilters();
+  el.sortSelect.value = sortMode;
   populateMonthYearSelects();
   renderCategoryChips();
   renderPriorityChips();
