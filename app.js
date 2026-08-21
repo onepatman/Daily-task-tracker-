@@ -960,7 +960,8 @@
     actions.append(completeHint, deleteHint);
 
     const row = document.createElement("div");
-    row.className = "task-row cat-" + (CATEGORIES[task.category] ? task.category : "other") + (done ? " done" : "");
+    row.className = "task-row cat-" + (CATEGORIES[task.category] ? task.category : "other") + (done ? " done" : "")
+      + (isOverdue(dateKey, task, done) ? " overdue" : "");
     row.draggable = isManualSort();
 
     const no = document.createElement("span");
@@ -1157,6 +1158,19 @@
     const diffMin = (due - now) / 60000;
     return diffMin <= 15 && diffMin >= -30;
   }
+  // Stronger than "due soon": a past date entirely (regardless of time), or
+  // today with a scheduled time more than 30 minutes gone -- picking up
+  // right where the "due soon" window (-30 to +15 min) leaves off.
+  function isOverdue(dateKey, task, doneFlag) {
+    if (doneFlag) return false;
+    const todayKey = toDateKey(new Date());
+    if (dateKey < todayKey) return true;
+    if (dateKey > todayKey || !task.time) return false;
+    const now = new Date();
+    const [h, m] = task.time.split(":").map(Number);
+    const due = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+    return (due - now) / 60000 < -30;
+  }
 
   function toggleDone(id, dateKey) {
     const t = tasks.find((x) => x.id === id);
@@ -1232,7 +1246,8 @@
       } else {
         dayTasks.slice(0, 6).forEach((t) => {
           const row = document.createElement("div");
-          row.className = "week-task-row" + (isDoneOn(t, key) ? " done" : "");
+          const tDone = isDoneOn(t, key);
+          row.className = "week-task-row" + (tDone ? " done" : "") + (isOverdue(key, t, tDone) ? " overdue" : "");
           const dot = document.createElement("span");
           dot.className = "week-task-cat-dot";
           dot.style.background = (CATEGORIES[t.category] || CATEGORIES.other).color;
@@ -1320,7 +1335,8 @@
   function buildDayDetailCard(task, dateKey) {
     const done = isDoneOn(task, dateKey);
     const card = document.createElement("div");
-    card.className = "day-detail-card cat-" + (CATEGORIES[task.category] ? task.category : "other");
+    card.className = "day-detail-card cat-" + (CATEGORIES[task.category] ? task.category : "other")
+      + (isOverdue(dateKey, task, done) ? " overdue" : "");
 
     const head = document.createElement("div");
     head.className = "day-detail-card-head";
@@ -1456,7 +1472,8 @@
   function buildTimelineTask(t, showTime) {
     const done = isDoneOn(t, selectedDate);
     const item = document.createElement("div");
-    item.className = "timeline-task cat-" + (CATEGORIES[t.category] ? t.category : "other") + (done ? " done" : "");
+    item.className = "timeline-task cat-" + (CATEGORIES[t.category] ? t.category : "other") + (done ? " done" : "")
+      + (isOverdue(selectedDate, t, done) ? " overdue" : "");
     if (showTime) {
       const time = document.createElement("span");
       time.className = "timeline-task-time";

@@ -656,6 +656,17 @@ html, body {
 .punchlist.manual-sort .task-row { cursor: grab; }
 .punchlist.manual-sort .task-row.dragging { cursor: grabbing; }
 
+/* ---------- Overdue ----------
+   Stronger than the existing "due soon" amber time text: a whole-card
+   red wash for a task whose date is entirely in the past, or whose
+   scheduled time today is more than 30 minutes gone, and still not
+   done. Keeps the category-colored left border intact. */
+.task-row.overdue {
+  background: color-mix(in srgb, var(--red) 9%, var(--surface));
+  border-color: color-mix(in srgb, var(--red) 40%, var(--border));
+}
+.task-row.overdue .task-time-inline { color: var(--red); font-weight: 800; }
+
 .task-no {
   font-family: var(--font-mono);
   color: var(--text-faint);
@@ -1357,6 +1368,7 @@ html, body {
 .week-task-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .week-task-row.done .week-task-title { text-decoration: line-through; color: var(--text-faint); }
 .week-task-time { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--text-soft); flex-shrink: 0; }
+.week-task-row.overdue .week-task-time { color: var(--red); }
 .week-day-empty { font-size: 13px; color: var(--text-faint); padding: 4px 0; }
 
 /* ---------- Timeline view ---------- */
@@ -1400,6 +1412,8 @@ html, body {
 .timeline-task.cat-errands { border-left-color: var(--cat-errands); }
 .timeline-task.cat-other { border-left-color: var(--cat-other); }
 .timeline-task.done { opacity: 0.55; text-decoration: line-through; }
+.timeline-task.overdue { background: color-mix(in srgb, var(--red) 12%, var(--surface-2)); }
+.timeline-task.overdue .timeline-task-time { color: var(--red); }
 .timeline-task-time { font-family: var(--font-mono); font-weight: 700; color: var(--text); flex-shrink: 0; }
 .timeline-task-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .timeline-unscheduled {
@@ -1649,6 +1663,8 @@ html, body {
 .day-detail-card-title { font-size: 15.5px; font-weight: 700; color: var(--text); word-break: break-word; }
 .day-detail-card-title.done { text-decoration: line-through; color: var(--text-faint); }
 .day-detail-card-time { font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: var(--text); flex-shrink: 0; white-space: nowrap; }
+.day-detail-card.overdue { background: color-mix(in srgb, var(--red) 10%, var(--surface-2)); }
+.day-detail-card.overdue .day-detail-card-time { color: var(--red); }
 .day-detail-card-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .day-detail-subtasks { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
 .day-detail-subtask-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
