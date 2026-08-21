@@ -217,6 +217,7 @@
     tpDone: document.getElementById("tpDone"),
     taskRepeat: document.getElementById("taskRepeat"),
     taskReminder: document.getElementById("taskReminder"),
+    taskTag: document.getElementById("taskTag"),
     taskNotes: document.getElementById("taskNotes"),
     taskPhotoPreview: document.getElementById("taskPhotoPreview"),
     addPhotoBtn: document.getElementById("addPhotoBtn"),
@@ -890,7 +891,7 @@
   function getVisibleTasks(dateKey) {
     let list = tasksForDate(dateKey);
     const q = searchQuery.trim().toLowerCase();
-    if (q) list = list.filter((t) => t.title.toLowerCase().includes(q) || (t.notes || "").toLowerCase().includes(q));
+    if (q) list = list.filter((t) => t.title.toLowerCase().includes(q) || (t.notes || "").toLowerCase().includes(q) || (t.tag || "").toLowerCase().includes(q));
     if (activeCategories.size) list = list.filter((t) => activeCategories.has(t.category));
     if (activePriorities.size) list = list.filter((t) => activePriorities.has(t.priority));
 
@@ -1122,6 +1123,13 @@
     catChip.style.background = catInfo.color;
     catChip.textContent = catInfo.label;
     meta.appendChild(catChip);
+
+    if (task.tag) {
+      const tagChip = document.createElement("span");
+      tagChip.className = "task-tag-chip";
+      renderHighlightedText(tagChip, task.tag, searchQuery);
+      meta.appendChild(tagChip);
+    }
 
     const pri = document.createElement("span");
     pri.className = "task-priority";
@@ -1545,6 +1553,12 @@
     catChip.style.background = catInfo.color;
     catChip.textContent = catInfo.label;
     meta.appendChild(catChip);
+    if (task.tag) {
+      const tagChip = document.createElement("span");
+      tagChip.className = "task-tag-chip";
+      tagChip.textContent = task.tag;
+      meta.appendChild(tagChip);
+    }
     const pri = document.createElement("span");
     pri.className = "task-priority";
     const priDot = document.createElement("span");
@@ -2475,9 +2489,9 @@
   });
   el.menuExportCsv.addEventListener("click", () => {
     closeMoreMenu();
-    const headers = ["title", "category", "priority", "date", "time", "end_time", "repeat", "done", "notes"];
+    const headers = ["title", "category", "priority", "tag", "date", "time", "end_time", "repeat", "done", "notes"];
     const rows = tasks.map((t) => [
-      t.title, t.category, t.priority, t.startDate, t.time, t.endTime || "",
+      t.title, t.category, t.priority, t.tag || "", t.startDate, t.time, t.endTime || "",
       t.repeat, t.repeat === "none" ? t.done : "", t.notes || "",
     ].map(csvEscape).join(","));
     const csv = [headers.join(","), ...rows].join("\n");
@@ -2879,6 +2893,7 @@
     el.taskEndTimeDisplay.textContent = "No time set";
     el.taskCategory.value = "work";
     el.taskPriority.value = "medium";
+    el.taskTag.value = "";
     el.taskRepeat.value = "none";
     el.taskReminder.checked = true;
     el.templateRow.hidden = false;
@@ -2905,6 +2920,7 @@
     el.taskEndTimeDisplay.textContent = task.endTime ? formatTimeDisplay(task.endTime) : "No time set";
     el.taskRepeat.value = task.repeat;
     el.taskReminder.checked = task.reminder;
+    el.taskTag.value = task.tag || "";
     el.taskNotes.value = task.notes || "";
     modalSubtasks = (task.subtasks || []).map((s) => ({ ...s }));
     renderSubtaskList();
@@ -2943,16 +2959,17 @@
     }
     const reminder = time ? el.taskReminder.checked : false;
     const notes = el.taskNotes.value.trim();
+    const tag = el.taskTag.value.trim();
     const repeat = el.taskRepeat.value;
     const subtasks = modalSubtasks.map((s) => ({ id: s.id, title: s.title, done: !!s.done }));
     const photo = modalPhoto;
 
     if (editingTask) {
-      Object.assign(editingTask, { title, category, priority, time, endTime, reminder, notes, repeat, subtasks, startDate, photo });
+      Object.assign(editingTask, { title, category, priority, time, endTime, reminder, notes, tag, repeat, subtasks, startDate, photo });
     } else {
       tasks.push({
         id: uid(),
-        title, category, priority, time, endTime, reminder, notes, subtasks, photo,
+        title, category, priority, time, endTime, reminder, notes, tag, subtasks, photo,
         repeat,
         startDate,
         done: false,
