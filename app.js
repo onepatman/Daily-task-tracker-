@@ -40,6 +40,7 @@
     alarm: '<circle cx="12" cy="13" r="8"/><polyline points="12 9 12 13 15 15"/><path d="M5 3 2 6"/><path d="M22 6l-3-3"/>',
     search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
     loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+    monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
   };
   function iconSvg(name, extraClass) {
     const inner = ICONS[name] || "";
@@ -127,6 +128,7 @@
     todayBtn: document.getElementById("todayBtn"),
     sheetDateFull: document.getElementById("sheetDateFull"),
     themeToggle: document.getElementById("themeToggle"),
+    themeChoices: document.getElementById("themeChoices"),
     accentSwatches: document.getElementById("accentSwatches"),
     moreMenuBtn: document.getElementById("moreMenuBtn"),
     moreMenu: document.getElementById("moreMenu"),
@@ -543,23 +545,50 @@
   });
 
   // ---------- Theme ----------
-  function applyTheme(theme) {
-    document.documentElement.setAttribute("data-theme", theme);
-    el.themeToggle.innerHTML = iconSvg(theme === "light" ? "sun" : "moon");
-    el.themeToggle.setAttribute("aria-label", theme === "light" ? "Switch to dark theme" : "Switch to light theme");
+  const lightSchemeQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
+  function resolveTheme(pref) {
+    if (pref === "light" || pref === "dark") return pref;
+    return lightSchemeQuery && lightSchemeQuery.matches ? "light" : "dark";
+  }
+  function getThemePref() {
+    const saved = localStorage.getItem(THEME_KEY);
+    return saved === "light" || saved === "dark" ? saved : "auto";
+  }
+  function applyTheme(pref) {
+    const resolved = resolveTheme(pref);
+    document.documentElement.setAttribute("data-theme", resolved);
+    el.themeToggle.innerHTML = iconSvg(resolved === "light" ? "sun" : "moon");
+    el.themeToggle.setAttribute("aria-label", resolved === "light" ? "Switch to dark theme" : "Switch to light theme");
     applyAccent(localStorage.getItem(ACCENT_KEY) || "orange");
+    if (el.themeChoices) {
+      el.themeChoices.querySelectorAll(".theme-choice-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.themeChoice === pref);
+      });
+    }
   }
   function initTheme() {
-    const saved = localStorage.getItem(THEME_KEY);
-    const theme = saved || ((window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark");
-    applyTheme(theme);
+    applyTheme(getThemePref());
+    if (lightSchemeQuery) {
+      const onSystemChange = () => { if (getThemePref() === "auto") applyTheme("auto"); };
+      if (lightSchemeQuery.addEventListener) lightSchemeQuery.addEventListener("change", onSystemChange);
+      else if (lightSchemeQuery.addListener) lightSchemeQuery.addListener(onSystemChange); // older Safari
+    }
   }
   el.themeToggle.addEventListener("click", () => {
-    const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-    const next = current === "light" ? "dark" : "light";
+    const next = resolveTheme(getThemePref()) === "light" ? "dark" : "light";
     localStorage.setItem(THEME_KEY, next);
     applyTheme(next);
   });
+  if (el.themeChoices) {
+    el.themeChoices.querySelectorAll(".theme-choice-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const choice = btn.dataset.themeChoice;
+        if (choice === "auto") localStorage.removeItem(THEME_KEY);
+        else localStorage.setItem(THEME_KEY, choice);
+        applyTheme(choice);
+      });
+    });
+  }
 
   // ---------- Accent color ----------
   const ACCENT_SWATCHES = [

@@ -50,6 +50,14 @@
           <button id="moreMenuBtn" class="tb-icon-btn" aria-label="More options" aria-haspopup="true" aria-expanded="false">⋮</button>
           <div class="more-menu" id="moreMenu" hidden>
             <div class="menu-accent-row">
+              <span class="menu-accent-label">Theme</span>
+              <div class="theme-choices" id="themeChoices">
+                <button type="button" class="theme-choice-btn" data-theme-choice="light" data-icon="sun"> Light</button>
+                <button type="button" class="theme-choice-btn" data-theme-choice="dark" data-icon="moon"> Dark</button>
+                <button type="button" class="theme-choice-btn" data-theme-choice="auto" data-icon="monitor"> Auto</button>
+              </div>
+            </div>
+            <div class="menu-accent-row">
               <span class="menu-accent-label">Accent color</span>
               <div class="accent-swatches" id="accentSwatches">
                 <button type="button" class="accent-swatch active" data-accent="orange" aria-label="Orange"></button>

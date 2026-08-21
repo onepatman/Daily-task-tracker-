@@ -1245,6 +1245,26 @@ html, body {
 .more-menu .accent-swatch[data-accent="pink"] { background: #f472b6; }
 .more-menu .accent-swatch.active { border-color: var(--text); }
 
+.theme-choices { display: flex; gap: 6px; }
+.more-menu .theme-choice-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 1;
+  width: auto;
+  padding: 7px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+.more-menu .theme-choice-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
 /* ---------- View tabs ---------- */
 .view-tabs {
   display: flex;
