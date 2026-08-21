@@ -1176,14 +1176,26 @@
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "task-edit-btn";
-    editBtn.setAttribute("aria-label", "View task details");
+    editBtn.setAttribute("aria-label", "Edit task");
     editBtn.innerHTML = iconSvg("pencil");
     editBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (selectMode) { toggleTaskSelected(task.id); renderCurrentView(); return; }
-      openTaskDetail(task, dateKey);
+      openEditModal(task, dateKey);
     });
     timeCol.appendChild(editBtn);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "task-delete-btn";
+    deleteBtn.setAttribute("aria-label", "Delete task");
+    deleteBtn.innerHTML = iconSvg("trash");
+    deleteBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (selectMode) { toggleTaskSelected(task.id); renderCurrentView(); return; }
+      requestDelete(task, dateKey);
+    });
+    timeCol.appendChild(deleteBtn);
 
     if (!selectMode) {
       const dragHandle = document.createElement("button");
@@ -1498,7 +1510,7 @@
     if (dayDetailMode === "task") {
       if (!dayDetailTask || !tasks.includes(dayDetailTask) || !occursOn(dayDetailTask, dayDetailDateKey)) { closeDayDetail(); return; }
       el.dayDetailTitle.textContent = dayDetailTask.title;
-      el.dayDetailBody.appendChild(buildDayDetailCard(dayDetailTask, dayDetailDateKey));
+      el.dayDetailBody.appendChild(buildDayDetailCard(dayDetailTask, dayDetailDateKey, false));
       return;
     }
 
@@ -1512,9 +1524,9 @@
       el.dayDetailBody.appendChild(empty);
       return;
     }
-    list.forEach((task) => el.dayDetailBody.appendChild(buildDayDetailCard(task, dayDetailDateKey)));
+    list.forEach((task) => el.dayDetailBody.appendChild(buildDayDetailCard(task, dayDetailDateKey, true)));
   }
-  function buildDayDetailCard(task, dateKey) {
+  function buildDayDetailCard(task, dateKey, showActions) {
     const done = isDoneOn(task, dateKey);
     const card = document.createElement("div");
     card.className = "day-detail-card cat-" + (CATEGORIES[task.category] ? task.category : "other")
@@ -1618,20 +1630,22 @@
       card.appendChild(subWrap);
     }
 
-    const actions = document.createElement("div");
-    actions.className = "day-detail-card-actions";
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.className = "primary";
-    editBtn.textContent = "Edit";
-    editBtn.addEventListener("click", () => { closeDayDetail(); openEditModal(task, dateKey); });
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "danger";
-    deleteBtn.textContent = "Delete";
-    deleteBtn.addEventListener("click", () => requestDelete(task, dateKey));
-    actions.append(editBtn, deleteBtn);
-    card.appendChild(actions);
+    if (showActions) {
+      const actions = document.createElement("div");
+      actions.className = "day-detail-card-actions";
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "primary";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => { closeDayDetail(); openEditModal(task, dateKey); });
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "danger";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", () => requestDelete(task, dateKey));
+      actions.append(editBtn, deleteBtn);
+      card.appendChild(actions);
+    }
 
     return card;
   }
