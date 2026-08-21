@@ -42,6 +42,7 @@
     loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
     monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
     camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/>',
+    tag: '<path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.2L4 3a1 1 0 0 0-1 1l.2 5.59a2 2 0 0 0 .58 1.41l9.6 9.6a2 2 0 0 0 2.83 0l4.38-4.38a2 2 0 0 0 0-2.81Z"/><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"/>',
   };
   function iconSvg(name, extraClass) {
     const inner = ICONS[name] || "";
@@ -3301,7 +3302,14 @@
   if (splash) {
     setTimeout(() => {
       splash.classList.add("hide");
+      // Give the skeleton placeholder a brief, real moment on screen right as
+      // the splash fades -- reassuring "the app is loading" feedback on every
+      // refresh, not just first launch. The task list itself has already
+      // rendered underneath by this point; this just reveals it.
+      setTimeout(() => el.punchlist.classList.remove("is-loading"), 350);
       setTimeout(() => splash.remove(), 450);
     }, 650);
+  } else {
+    el.punchlist.classList.remove("is-loading");
   }
 })();

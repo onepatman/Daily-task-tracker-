@@ -678,6 +678,30 @@ html, body {
 }
 .punchlist-body { min-height: 40px; display: flex; flex-direction: column; gap: 8px; }
 
+/* ---------- Skeleton loading state (shown briefly on every app load/refresh) ---------- */
+.punchlist.is-loading #taskList,
+.punchlist.is-loading #emptyState {
+  display: none !important;
+}
+.punchlist:not(.is-loading) .skeleton-loader {
+  display: none;
+}
+.skeleton-loader { display: flex; flex-direction: column; gap: 8px; }
+.skeleton-row {
+  height: 64px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(100deg, var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-row { animation: none; background: var(--surface-2); }
+}
+
 .task-row-wrap {
   position: relative;
   border-radius: var(--radius-sm);
@@ -1066,6 +1090,18 @@ html, body {
   margin-bottom: 12px;
 }
 .modal .optional { font-weight: 400; opacity: 0.7; }
+.tag-field-label {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.tag-field-label .icon { width: 15px; height: 15px; color: var(--accent); flex-shrink: 0; }
+.tag-field-label input { flex-basis: 100%; }
 .field-row { display: flex; gap: 10px; }
 .field-row label { flex: 1; }
 .modal input[type="text"],
@@ -1442,6 +1478,14 @@ html, body {
   gap: 6px;
   flex: 1;
   min-width: 0;
+}
+/* Below ~420px there isn't room for 3 tab labels + Select + the status
+   badge on one line -- flex would otherwise shrink the tabs into unreadable
+   ellipsis ("D...", "W..."). Give the tabs their own full-width row instead
+   so the labels always stay legible, pushing Select + the badge down to a
+   second row together (view-tabs-row already has flex-wrap: wrap). */
+@media (max-width: 560px) {
+  .view-tabs { flex-basis: 100%; }
 }
 .view-tab {
   flex: 1;
