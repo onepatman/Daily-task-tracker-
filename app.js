@@ -271,6 +271,25 @@
     return task.endTime ? `${task.time}–${task.endTime}` : task.time;
   }
 
+  // Sets el's text content, wrapping the first case-insensitive match of
+  // `query` in a <mark> so search results show what actually matched.
+  // Builds via DOM nodes (not innerHTML) so arbitrary task text can never
+  // be interpreted as markup.
+  function renderHighlightedText(el, text, query) {
+    el.textContent = "";
+    const q = (query || "").trim();
+    if (!q) { el.textContent = text; return; }
+    const idx = text.toLowerCase().indexOf(q.toLowerCase());
+    if (idx === -1) { el.textContent = text; return; }
+    if (idx > 0) el.appendChild(document.createTextNode(text.slice(0, idx)));
+    const mark = document.createElement("mark");
+    mark.className = "search-highlight";
+    mark.textContent = text.slice(idx, idx + q.length);
+    el.appendChild(mark);
+    const rest = text.slice(idx + q.length);
+    if (rest) el.appendChild(document.createTextNode(rest));
+  }
+
   // ---------- Persistence & migration ----------
   function migrateTask(t) {
     if (t.endTime === undefined) t.endTime = "";
@@ -962,7 +981,7 @@
     titleRow.className = "task-title-row";
     const title = document.createElement("span");
     title.className = "task-title";
-    title.textContent = task.title;
+    renderHighlightedText(title, task.title, searchQuery);
     titleRow.appendChild(title);
     if (task.repeat !== "none") {
       const rep = document.createElement("span");
@@ -975,7 +994,7 @@
     if (task.notes) {
       const notes = document.createElement("div");
       notes.className = "task-notes";
-      notes.textContent = task.notes;
+      renderHighlightedText(notes, task.notes, searchQuery);
       main.appendChild(notes);
     }
 
@@ -1219,7 +1238,7 @@
           dot.style.background = (CATEGORIES[t.category] || CATEGORIES.other).color;
           const ttl = document.createElement("span");
           ttl.className = "week-task-title";
-          ttl.textContent = t.title;
+          renderHighlightedText(ttl, t.title, searchQuery);
           if (t.time) {
             const time = document.createElement("span");
             time.className = "week-task-time";
@@ -1446,7 +1465,7 @@
     }
     const ttl = document.createElement("span");
     ttl.className = "timeline-task-title";
-    ttl.textContent = t.title;
+    renderHighlightedText(ttl, t.title, searchQuery);
     item.appendChild(ttl);
     item.addEventListener("click", () => openTaskDetail(t, selectedDate));
     return item;
