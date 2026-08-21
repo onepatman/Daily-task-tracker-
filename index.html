@@ -95,6 +95,7 @@
       <button type="button" class="view-tab" data-view="week" role="tab" aria-selected="false">Week</button>
       <button type="button" class="view-tab" data-view="timeline" role="tab" aria-selected="false">Timeline</button>
     </div>
+    <button type="button" class="select-mode-btn" id="selectModeBtn"><span class="icon" data-icon="checkbox"></span> Select</button>
     <span class="view-status-badge" id="viewStatusBadge">0/0 done</span>
   </div>
 
@@ -181,6 +182,15 @@
 
   <button class="fab" id="addTaskBtn" aria-label="Log new task">+</button>
   <button class="install-btn" id="installBtn" hidden>APPROVED FOR FIELD USE — Install App</button>
+
+  <div class="bulk-bar" id="bulkBar" hidden>
+    <span id="bulkBarCount">0 selected</span>
+    <div class="bulk-bar-actions">
+      <button type="button" id="bulkMarkDoneBtn"><span class="icon" data-icon="check"></span> Mark done</button>
+      <button type="button" id="bulkDeleteBtn" class="danger"><span class="icon" data-icon="trash"></span> Delete</button>
+      <button type="button" id="bulkCancelBtn">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <div class="print-sheet" id="printSheet">

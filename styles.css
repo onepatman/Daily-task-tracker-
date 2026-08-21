@@ -325,6 +325,73 @@ html, body {
   border-radius: var(--radius-sm);
   white-space: nowrap;
 }
+.select-mode-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-soft);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.select-mode-btn .icon { width: 14px; height: 14px; }
+.select-mode-btn.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+
+/* ---------- Bulk select mode ---------- */
+.task-select-checkbox {
+  width: 19px; height: 19px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.task-row.select-mode { cursor: pointer; }
+.task-row.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.bulk-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 10px 12px 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  z-index: 55;
+  font-size: 13px;
+  font-weight: 700;
+  max-width: calc(100vw - 32px);
+}
+.bulk-bar-actions { display: flex; gap: 8px; }
+.bulk-bar-actions button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+.bulk-bar-actions .icon { width: 13px; height: 13px; }
+.bulk-bar-actions button:first-child { color: var(--green); border-color: var(--green); }
+.bulk-bar-actions button.danger { color: var(--red); border-color: var(--red); }
 
 /* ---------- Footer ----------
    On mobile the footer simply follows the content -- pinning it to the

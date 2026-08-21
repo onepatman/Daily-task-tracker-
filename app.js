@@ -118,6 +118,8 @@
   let dayDetailDateKey = null;
   let dayDetailMode = "day"; // 'day' | 'task'
   let dayDetailTask = null;
+  let selectMode = false;
+  const selectedTaskIds = new Set();
 
   // ---------- Elements ----------
   const el = {
@@ -145,6 +147,12 @@
     menuImport: document.getElementById("menuImport"),
     importFileInput: document.getElementById("importFileInput"),
     viewTabs: document.getElementById("viewTabs"),
+    selectModeBtn: document.getElementById("selectModeBtn"),
+    bulkBar: document.getElementById("bulkBar"),
+    bulkBarCount: document.getElementById("bulkBarCount"),
+    bulkMarkDoneBtn: document.getElementById("bulkMarkDoneBtn"),
+    bulkDeleteBtn: document.getElementById("bulkDeleteBtn"),
+    bulkCancelBtn: document.getElementById("bulkCancelBtn"),
     viewStatusBadge: document.getElementById("viewStatusBadge"),
     calendarGrid: document.getElementById("calendarGrid"),
     calendarSection: document.getElementById("calendarSection"),
@@ -694,12 +702,73 @@
       void activeEl.offsetWidth; // restart the animation even if it's still playing
       activeEl.classList.add("view-entering");
     }
+    el.selectModeBtn.hidden = view !== "day";
+    if (view !== "day" && selectMode) setSelectMode(false);
     updateViewStatusBadge();
     renderCurrentView();
   }
   el.viewTabs.querySelectorAll(".view-tab").forEach((tab) => {
     tab.addEventListener("click", () => setView(tab.dataset.view));
   });
+
+  // ---------- Bulk select mode (Day view) ----------
+  function setSelectMode(on) {
+    selectMode = on;
+    selectedTaskIds.clear();
+    el.selectModeBtn.classList.toggle("active", on);
+    el.selectModeBtn.innerHTML = iconSvg(on ? "close" : "checkbox") + (on ? " Cancel" : " Select");
+    updateBulkBar();
+    renderCurrentView();
+  }
+  function updateBulkBar() {
+    el.bulkBar.hidden = !selectMode || selectedTaskIds.size === 0;
+    el.bulkBarCount.textContent = `${selectedTaskIds.size} selected`;
+  }
+  function toggleTaskSelected(id) {
+    if (selectedTaskIds.has(id)) selectedTaskIds.delete(id);
+    else selectedTaskIds.add(id);
+    updateBulkBar();
+  }
+  el.selectModeBtn.addEventListener("click", () => setSelectMode(!selectMode));
+  el.bulkCancelBtn.addEventListener("click", () => setSelectMode(false));
+  el.bulkMarkDoneBtn.addEventListener("click", () => {
+    const ids = Array.from(selectedTaskIds);
+    ids.forEach((id) => {
+      const task = tasks.find((t) => t.id === id);
+      if (task) setDoneOn(task, selectedDate, true);
+    });
+    saveTasks();
+    setSelectMode(false);
+    renderAll();
+  });
+  el.bulkDeleteBtn.addEventListener("click", () => {
+    const ids = Array.from(selectedTaskIds);
+    if (!ids.length) return;
+    const snapshot = JSON.parse(JSON.stringify(tasks));
+    showConfirm(`Remove ${ids.length} selected task${ids.length === 1 ? "" : "s"} from this sheet?`, [
+      { label: "Delete", danger: true, onClick: () => {
+          ids.forEach((id) => {
+            const task = tasks.find((t) => t.id === id);
+            if (!task) return;
+            if (task.repeat === "none") {
+              tasks = tasks.filter((t) => t.id !== id);
+            } else {
+              task.skipped = task.skipped || {};
+              task.skipped[selectedDate] = true;
+            }
+          });
+          saveTasks();
+          setSelectMode(false);
+          renderAll();
+          showSnackbar(`${ids.length} task${ids.length === 1 ? "" : "s"} deleted`, () => {
+            tasks = snapshot;
+            saveTasks(); renderAll();
+          });
+        } },
+      { label: "Cancel", cancel: true },
+    ]);
+  });
+
   function renderCurrentView() {
     if (currentView === "week") renderWeekView();
     else if (currentView === "timeline") renderTimelineView();
@@ -960,10 +1029,31 @@
     deleteHint.innerHTML = "DELETE " + iconSvg("trash");
     actions.append(completeHint, deleteHint);
 
+    const selected = selectMode && selectedTaskIds.has(task.id);
     const row = document.createElement("div");
     row.className = "task-row cat-" + (CATEGORIES[task.category] ? task.category : "other") + (done ? " done" : "")
-      + (isOverdue(dateKey, task, done) ? " overdue" : "");
-    row.draggable = isManualSort();
+      + (isOverdue(dateKey, task, done) ? " overdue" : "")
+      + (selectMode ? " select-mode" : "") + (selected ? " selected" : "");
+    row.draggable = isManualSort() && !selectMode;
+    row.addEventListener("click", () => {
+      if (!selectMode) return;
+      toggleTaskSelected(task.id);
+      renderCurrentView();
+    });
+
+    let selectCb = null;
+    if (selectMode) {
+      selectCb = document.createElement("input");
+      selectCb.type = "checkbox";
+      selectCb.className = "task-select-checkbox";
+      selectCb.checked = selected;
+      selectCb.setAttribute("aria-label", "Select task");
+      selectCb.addEventListener("click", (e) => e.stopPropagation());
+      selectCb.addEventListener("change", () => {
+        toggleTaskSelected(task.id);
+        row.classList.toggle("selected", selectCb.checked);
+      });
+    }
 
     const no = document.createElement("span");
     no.className = "task-no";
@@ -974,7 +1064,11 @@
     check.className = "task-check";
     check.setAttribute("aria-checked", done ? "true" : "false");
     check.innerHTML = done ? iconSvg("check") : "";
-    check.addEventListener("click", (e) => { e.stopPropagation(); toggleDone(task.id, dateKey); });
+    check.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (selectMode) { toggleTaskSelected(task.id); renderCurrentView(); return; }
+      toggleDone(task.id, dateKey);
+    });
 
     const main = document.createElement("div");
     main.className = "task-main";
@@ -1038,6 +1132,7 @@
 
     main.addEventListener("click", () => {
       if (row.dataset.suppressClick === "1") return;
+      if (selectMode) return;
       openTaskDetail(task, dateKey);
     });
 
@@ -1051,6 +1146,7 @@
     editBtn.innerHTML = iconSvg("pencil");
     editBtn.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (selectMode) { toggleTaskSelected(task.id); renderCurrentView(); return; }
       openTaskDetail(task, dateKey);
     });
     timeCol.appendChild(editBtn);
@@ -1068,6 +1164,7 @@
 
     const line = document.createElement("div");
     line.className = "task-row-line";
+    if (selectCb) line.appendChild(selectCb);
     line.append(no, check, main, timeCol);
     row.appendChild(line);
 
@@ -1084,7 +1181,7 @@
     const THRESH = 64;
 
     row.addEventListener("pointerdown", (e) => {
-      if (isManualSort()) return;
+      if (isManualSort() || selectMode) return;
       if (e.target.closest(".task-check")) return;
       startX = e.clientX; startY = e.clientY; dx = 0;
       dragging = true; decided = false; isHorizontal = false;
