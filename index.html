@@ -43,7 +43,12 @@
       <button id="nextMonth" class="tb-arrow" aria-label="Next month">›</button>
     </div>
     <div class="tb-nav-secondary">
-      <button id="todayBtn" class="tb-today-btn" type="button">Jump to today</button>
+      <div class="tb-nav-left">
+        <button id="todayBtn" class="tb-today-btn" type="button">Jump to today</button>
+        <span class="sync-status-pill" id="syncStatusPill" hidden>
+          <span class="icon icon-spin" data-icon="loader"></span> Syncing…
+        </span>
+      </div>
       <div class="tb-nav-right">
         <button id="themeToggle" class="tb-icon-btn" aria-label="Toggle light/dark theme"></button>
         <div class="more-menu-wrap">

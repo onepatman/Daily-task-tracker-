@@ -129,6 +129,7 @@
     sheetDateFull: document.getElementById("sheetDateFull"),
     themeToggle: document.getElementById("themeToggle"),
     themeChoices: document.getElementById("themeChoices"),
+    syncStatusPill: document.getElementById("syncStatusPill"),
     accentSwatches: document.getElementById("accentSwatches"),
     moreMenuBtn: document.getElementById("moreMenuBtn"),
     moreMenu: document.getElementById("moreMenu"),
@@ -1917,6 +1918,9 @@
   }
 
   function renderSyncBody() {
+    // Keep this in sync even while the overlay is closed -- it's the only
+    // visible feedback during the silent background resume on page load.
+    el.syncStatusPill.hidden = syncStatus !== "connecting";
     if (el.syncOverlay.hidden) return;
     const body = el.syncBody;
     body.innerHTML = "";
@@ -2052,8 +2056,17 @@
   el.syncOverlay.addEventListener("click", (e) => { if (e.target === el.syncOverlay) closeSyncOverlay(); });
 
   // Silently resume a previously-connected sync on load, without popping the overlay open.
+  // The syncStatusPill (shown via renderSyncBody) is the only feedback the
+  // user gets that this is happening in the background.
   if (syncCode) {
-    ensureFirebase().then(subscribeSync).then(resumePushIfEnabled).catch((e) => console.error("auto sync resume failed", e));
+    syncStatus = "connecting";
+    renderSyncBody();
+    ensureFirebase().then(subscribeSync).then(resumePushIfEnabled).catch((e) => {
+      console.error("auto sync resume failed", e);
+      syncStatus = "error";
+      syncError = "Hindi makaconnect. Subukan ulit.";
+      renderSyncBody();
+    });
   }
 
   // ---------- Print ----------
