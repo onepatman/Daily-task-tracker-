@@ -160,12 +160,17 @@
         </div>
       </section>
 
-      <main class="punchlist" id="dayView">
+      <main class="punchlist is-loading" id="dayView">
         <div class="punchlist-header">
           <span class="col-no">NO.</span>
           <span class="col-check" data-icon="check"></span>
           <span class="col-task">TASK</span>
           <span class="col-time">TIME</span>
+        </div>
+        <div class="skeleton-loader" id="skeletonLoader" aria-hidden="true">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
         </div>
         <div class="punchlist-body" id="taskList"></div>
         <p class="empty-state" id="emptyState">No items logged for this sheet.<br>Tap <strong>+ LOG ITEM</strong> to add one.</p>
@@ -328,7 +333,7 @@
       </label>
     </div>
 
-    <label>Client / Project tag
+    <label class="tag-field-label"><span class="icon" data-icon="tag"></span> Client / Project tag
       <input type="text" id="taskTag" maxlength="40" placeholder="e.g. Acme Corp, Site B" />
     </label>
 
