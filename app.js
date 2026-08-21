@@ -582,10 +582,15 @@
   });
 
   // ---------- Theme ----------
-  const lightSchemeQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
+  // "Auto" follows the device's local wall-clock time (light 06:00-17:59,
+  // dark 18:00-05:59) rather than the OS-level prefers-color-scheme setting
+  // -- that setting reflects whatever the user's phone/OS dark-mode toggle
+  // happens to be set to, which may have nothing to do with the actual time
+  // of day where they are.
   function resolveTheme(pref) {
     if (pref === "light" || pref === "dark") return pref;
-    return lightSchemeQuery && lightSchemeQuery.matches ? "light" : "dark";
+    const hour = new Date().getHours();
+    return (hour >= 6 && hour < 18) ? "light" : "dark";
   }
   function getThemePref() {
     const saved = localStorage.getItem(THEME_KEY);
@@ -605,11 +610,11 @@
   }
   function initTheme() {
     applyTheme(getThemePref());
-    if (lightSchemeQuery) {
-      const onSystemChange = () => { if (getThemePref() === "auto") applyTheme("auto"); };
-      if (lightSchemeQuery.addEventListener) lightSchemeQuery.addEventListener("change", onSystemChange);
-      else if (lightSchemeQuery.addListener) lightSchemeQuery.addListener(onSystemChange); // older Safari
-    }
+    // Re-check every minute so Auto flips over live at the 6am/6pm boundary
+    // without needing a reload.
+    setInterval(() => {
+      if (getThemePref() === "auto") applyTheme("auto");
+    }, 60000);
   }
   el.themeToggle.addEventListener("click", () => {
     const next = resolveTheme(getThemePref()) === "light" ? "dark" : "light";
@@ -839,6 +844,7 @@
       const btn = document.createElement("button");
       btn.className = "cal-day";
       btn.type = "button";
+      btn.dataset.dateKey = key;
       if (key === toDateKey(today)) btn.classList.add("today");
       if (key === selectedDate) btn.classList.add("selected");
 
@@ -868,18 +874,6 @@
       btn.addEventListener("click", () => {
         selectedDate = key;
         renderAll();
-      });
-      btn.addEventListener("dragover", (e) => {
-        if (!draggedTaskId) return;
-        e.preventDefault();
-        btn.classList.add("drag-over");
-      });
-      btn.addEventListener("dragleave", () => btn.classList.remove("drag-over"));
-      btn.addEventListener("drop", (e) => {
-        e.preventDefault();
-        btn.classList.remove("drag-over");
-        const id = e.dataTransfer.getData("text/plain") || draggedTaskId;
-        if (id) rescheduleTask(id, key);
       });
       el.calendarGrid.appendChild(btn);
     }
@@ -1197,28 +1191,6 @@
     });
     timeCol.appendChild(deleteBtn);
 
-    if (!selectMode) {
-      const dragHandle = document.createElement("button");
-      dragHandle.type = "button";
-      dragHandle.className = "task-drag-handle";
-      dragHandle.draggable = true;
-      dragHandle.setAttribute("aria-label", "Drag to a date on the calendar to reschedule");
-      dragHandle.title = "Drag to a date on the calendar to reschedule";
-      dragHandle.innerHTML = iconSvg("calendar");
-      dragHandle.addEventListener("click", (e) => e.stopPropagation());
-      dragHandle.addEventListener("dragstart", (e) => {
-        draggedTaskId = task.id;
-        row.classList.add("dragging");
-        e.dataTransfer.setData("text/plain", task.id);
-        e.dataTransfer.effectAllowed = "move";
-      });
-      dragHandle.addEventListener("dragend", () => {
-        row.classList.remove("dragging");
-        draggedTaskId = null;
-      });
-      timeCol.appendChild(dragHandle);
-    }
-
     if (task.time) {
       const timeRow = document.createElement("div");
       timeRow.className = "task-time-row";
@@ -1244,17 +1216,81 @@
     return wrap;
   }
 
+  const RESCHEDULE_HOLD_MS = 450;
+
   function attachSwipe(row, task, dateKey) {
     let startX = 0, startY = 0, dx = 0, dragging = false, decided = false, isHorizontal = false;
     const THRESH = 64;
+    let longPressTimer = null;
+    let rescheduling = false;
+    let activePointerId = null;
+    let ghost = null;
+    let hoveredCell = null;
+
+    function clearLongPress() {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    function findDayCellAt(x, y) {
+      const hit = document.elementFromPoint(x, y);
+      return hit ? hit.closest(".cal-day:not(.blank)") : null;
+    }
+    function setHovered(cell) {
+      if (cell === hoveredCell) return;
+      if (hoveredCell) hoveredCell.classList.remove("drag-over");
+      hoveredCell = cell;
+      if (hoveredCell) hoveredCell.classList.add("drag-over");
+    }
+    function startReschedule(x, y) {
+      rescheduling = true;
+      draggedTaskId = task.id;
+      row.classList.add("dragging");
+      row.dataset.suppressClick = "1";
+      if (navigator.vibrate) navigator.vibrate(15);
+      if (!calendarOpen) el.calendarToggle.click();
+      el.calendarSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      ghost = document.createElement("div");
+      ghost.className = "reschedule-drag-ghost";
+      ghost.textContent = task.title;
+      document.body.appendChild(ghost);
+      moveGhost(x, y);
+      setHovered(findDayCellAt(x, y));
+    }
+    function moveGhost(x, y) {
+      if (!ghost) return;
+      ghost.style.left = x + "px";
+      ghost.style.top = y + "px";
+    }
+    function endReschedule(x, y) {
+      row.classList.remove("dragging");
+      if (ghost) { ghost.remove(); ghost = null; }
+      const cell = findDayCellAt(x, y);
+      setHovered(null);
+      draggedTaskId = null;
+      rescheduling = false;
+      if (cell && cell.dataset.dateKey) rescheduleTask(task.id, cell.dataset.dateKey);
+    }
 
     row.addEventListener("pointerdown", (e) => {
       if (isManualSort() || selectMode) return;
-      if (e.target.closest(".task-check")) return;
+      if (e.target.closest(".task-check, .task-edit-btn, .task-delete-btn, .task-select-checkbox")) return;
       startX = e.clientX; startY = e.clientY; dx = 0;
       dragging = true; decided = false; isHorizontal = false;
+      activePointerId = e.pointerId;
+      clearLongPress();
+      longPressTimer = setTimeout(() => {
+        if (!dragging) return;
+        decided = true;
+        try { row.setPointerCapture(activePointerId); } catch (err) { /* ignore */ }
+        startReschedule(e.clientX, e.clientY);
+      }, RESCHEDULE_HOLD_MS);
     });
     row.addEventListener("pointermove", (e) => {
+      if (rescheduling) {
+        moveGhost(e.clientX, e.clientY);
+        setHovered(findDayCellAt(e.clientX, e.clientY));
+        return;
+      }
       if (!dragging) return;
       const dxRaw = e.clientX - startX;
       const dyRaw = e.clientY - startY;
@@ -1262,6 +1298,7 @@
         if (Math.abs(dxRaw) > 8 || Math.abs(dyRaw) > 8) {
           decided = true;
           isHorizontal = Math.abs(dxRaw) > Math.abs(dyRaw);
+          clearLongPress();
         } else return;
       }
       if (!isHorizontal) return;
@@ -1269,7 +1306,14 @@
       row.style.transform = `translateX(${dx}px)`;
       row.dataset.suppressClick = "1";
     });
-    function end() {
+    function end(e) {
+      clearLongPress();
+      if (rescheduling) {
+        try { row.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+        endReschedule(e.clientX, e.clientY);
+        setTimeout(() => { row.dataset.suppressClick = "0"; }, 50);
+        return;
+      }
       if (!dragging) return;
       dragging = false;
       row.style.transform = "";
@@ -1369,7 +1413,24 @@
   function toggleDone(id, dateKey) {
     const t = tasks.find((x) => x.id === id);
     if (!t) return;
-    setDoneOn(t, dateKey, !isDoneOn(t, dateKey));
+    const newDone = !isDoneOn(t, dateKey);
+    if (t.subtasks && t.subtasks.length) {
+      if (newDone) {
+        // Remember which subtasks were already checked before force-completing
+        // them all, so unchecking the main box can restore exactly that state
+        // instead of blindly unchecking everything.
+        t.subtaskSnapshot = t.subtasks.map((s) => !!s.done);
+        t.subtasks.forEach((s) => { s.done = true; });
+      } else {
+        if (t.subtaskSnapshot && t.subtaskSnapshot.length === t.subtasks.length) {
+          t.subtasks.forEach((s, i) => { s.done = t.subtaskSnapshot[i]; });
+        } else {
+          t.subtasks.forEach((s) => { s.done = false; });
+        }
+        delete t.subtaskSnapshot;
+      }
+    }
+    setDoneOn(t, dateKey, newDone);
     saveTasks();
     renderAll();
   }
