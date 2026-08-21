@@ -726,6 +726,14 @@ html, body {
 .task-repeat-icon { font-size: 12px; color: var(--text-faint); flex-shrink: 0; }
 .task-row.done .task-title { text-decoration: line-through; color: var(--text-faint); }
 .task-notes { font-size: 13px; color: var(--text-soft); margin-top: 2px; word-break: break-word; }
+
+.search-highlight {
+  background: var(--accent);
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--text);
+  border-radius: 3px;
+  padding: 0 1px;
+}
 .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .task-cat-chip {
   font-size: 11px;
