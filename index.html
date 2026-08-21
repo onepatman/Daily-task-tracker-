@@ -346,6 +346,16 @@
       <textarea id="taskNotes" maxlength="300" rows="2" placeholder="Add details…"></textarea>
     </label>
 
+    <div class="photo-field">
+      <span class="photo-field-label">Photo</span>
+      <div class="photo-field-body">
+        <img id="taskPhotoPreview" class="photo-preview" hidden alt="Attached photo preview" />
+        <button type="button" id="addPhotoBtn" class="btn-ghost btn-small"><span class="icon" data-icon="camera"></span> Add photo</button>
+        <button type="button" id="removePhotoBtn" class="btn-ghost btn-small" hidden><span class="icon" data-icon="trash"></span> Remove</button>
+      </div>
+      <input type="file" id="taskPhotoInput" accept="image/*" hidden />
+    </div>
+
     <div class="subtask-field">
       <div class="subtask-field-head">
         <span class="subtask-field-label">Subtasks</span>
