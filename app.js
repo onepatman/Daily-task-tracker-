@@ -2078,12 +2078,41 @@
     head.appendChild(count);
     section.appendChild(head);
 
+    const pct = Math.round((doneCount / groupTasks.length) * 100);
     const bar = document.createElement("div");
     bar.className = "week-day-bar board-group-bar";
     const fill = document.createElement("span");
-    fill.style.width = Math.round((doneCount / groupTasks.length) * 100) + "%";
+    fill.style.width = pct + "%";
     bar.appendChild(fill);
     section.appendChild(bar);
+
+    // Rollup line: at a glance, how far along the project is, what is still
+    // open, what has already slipped, and when the next piece is due.
+    const todayKey = toDateKey(today);
+    const open = groupTasks.filter((t) => !isDoneOn(t, t.startDate));
+    const overdueCount = open.filter((t) => isOverdue(t.startDate, t, false)).length;
+    const nextDue = open
+      .filter((t) => t.startDate >= todayKey)
+      .map((t) => t.startDate)
+      .sort()[0];
+
+    const meta = document.createElement("div");
+    meta.className = "board-group-meta";
+    const addStat = (text, tone) => {
+      const s = document.createElement("span");
+      s.className = "board-group-stat" + (tone ? " " + tone : "");
+      s.textContent = text;
+      meta.appendChild(s);
+    };
+    addStat(pct + "% complete");
+    if (open.length) addStat(`${open.length} left`);
+    if (overdueCount) addStat(`${overdueCount} overdue`, "danger");
+    if (nextDue) {
+      const d = parseDateKey(nextDue);
+      addStat(`next: ${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`);
+    }
+    if (!open.length) addStat("all done", "good");
+    section.appendChild(meta);
 
     const list = document.createElement("div");
     list.className = "board-group-tasks";
