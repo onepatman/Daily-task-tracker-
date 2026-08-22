@@ -104,7 +104,7 @@
       if (typeof saved.sort === "string") sortMode = saved.sort;
     } catch (e) { /* ignore malformed saved filters */ }
   }
-  let currentView = "day"; // 'day' | 'week' | 'timeline'
+  let currentView = "home"; // 'home' | 'day' | 'week' | 'timeline' | 'board'
   let editingTask = null;
   let editingDateKey = null;
   let modalSubtasks = [];
@@ -178,6 +178,15 @@
     priorityChips: document.getElementById("priorityChips"),
     sortSelect: document.getElementById("sortSelect"),
     punchlist: document.querySelector(".punchlist"),
+    toolbar: document.getElementById("toolbar"),
+    homeView: document.getElementById("homeView"),
+    homeStats: document.getElementById("homeStats"),
+    homeOverdueSection: document.getElementById("homeOverdueSection"),
+    homeOverdueList: document.getElementById("homeOverdueList"),
+    homeTodaySection: document.getElementById("homeTodaySection"),
+    homeTodayList: document.getElementById("homeTodayList"),
+    homeUpcomingSection: document.getElementById("homeUpcomingSection"),
+    homeUpcomingList: document.getElementById("homeUpcomingList"),
     dayView: document.getElementById("dayView"),
     weekView: document.getElementById("weekView"),
     timelineView: document.getElementById("timelineView"),
@@ -739,12 +748,14 @@
       tab.classList.toggle("active", active);
       tab.setAttribute("aria-selected", active ? "true" : "false");
     });
+    el.homeView.hidden = view !== "home";
     el.dayView.hidden = view !== "day";
     el.weekView.hidden = view !== "week";
     el.timelineView.hidden = view !== "timeline";
     el.boardView.hidden = view !== "board";
+    el.toolbar.hidden = view === "home";
     if (changed) {
-      const activeEl = view === "day" ? el.dayView : view === "week" ? el.weekView : view === "timeline" ? el.timelineView : el.boardView;
+      const activeEl = view === "home" ? el.homeView : view === "day" ? el.dayView : view === "week" ? el.weekView : view === "timeline" ? el.timelineView : el.boardView;
       activeEl.classList.remove("view-entering");
       void activeEl.offsetWidth; // restart the animation even if it's still playing
       activeEl.classList.add("view-entering");
@@ -818,7 +829,8 @@
   });
 
   function renderCurrentView() {
-    if (currentView === "week") renderWeekView();
+    if (currentView === "home") renderHomeView();
+    else if (currentView === "week") renderWeekView();
     else if (currentView === "timeline") renderTimelineView();
     else if (currentView === "board") renderBoardView();
     else renderSheet();
@@ -1012,6 +1024,11 @@
     } else if (currentView === "board") {
       const done = tasks.filter((t) => isDoneOn(t, t.startDate)).length;
       el.viewStatusBadge.textContent = `${done}/${tasks.length} tasks done`;
+    } else if (currentView === "home") {
+      const todayKey = toDateKey(today);
+      const list = tasksForDate(todayKey);
+      const done = list.filter((t) => isDoneOn(t, todayKey)).length;
+      el.viewStatusBadge.textContent = `${done}/${list.length} done today`;
     } else {
       const list = tasksForDate(selectedDate);
       const done = list.filter((t) => isDoneOn(t, selectedDate)).length;
@@ -1807,6 +1824,89 @@
     return item;
   }
 
+  // ---------- Home dashboard (landing view) ----------
+  const HOME_OVERDUE_LOOKBACK_DAYS = 30;
+  const HOME_OVERDUE_SHOWN = 20;
+  const HOME_UPCOMING_LOOKAHEAD_DAYS = 7;
+  const HOME_UPCOMING_SHOWN = 10;
+
+  function getHomeOverdueEntries() {
+    const entries = []; // { task, dateKey }, most recent day first
+    const cursor = new Date(today);
+    cursor.setDate(cursor.getDate() - 1);
+    for (let i = 0; i < HOME_OVERDUE_LOOKBACK_DAYS; i++) {
+      const key = toDateKey(cursor);
+      tasksForDate(key).forEach((t) => {
+        if (!isDoneOn(t, key)) entries.push({ task: t, dateKey: key });
+      });
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return entries;
+  }
+  function getHomeUpcomingEntries() {
+    const entries = []; // { task, dateKey }, soonest first
+    const cursor = new Date(today);
+    cursor.setDate(cursor.getDate() + 1);
+    for (let i = 0; i < HOME_UPCOMING_LOOKAHEAD_DAYS; i++) {
+      const key = toDateKey(cursor);
+      tasksForDate(key)
+        .sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"))
+        .forEach((t) => entries.push({ task: t, dateKey: key }));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return entries;
+  }
+  function renderHomeSection(sectionEl, listEl, entries, emptyText, capAt) {
+    listEl.innerHTML = "";
+    if (entries.length === 0) {
+      if (emptyText) {
+        const empty = document.createElement("p");
+        empty.className = "board-empty home-empty";
+        empty.textContent = emptyText;
+        listEl.appendChild(empty);
+      } else {
+        sectionEl.hidden = true;
+        return;
+      }
+    }
+    sectionEl.hidden = false;
+    const shown = capAt ? entries.slice(0, capAt) : entries;
+    shown.forEach(({ task, dateKey }) => listEl.appendChild(buildBoardTaskRow(task, dateKey)));
+    if (capAt && entries.length > capAt) {
+      const more = document.createElement("p");
+      more.className = "home-more";
+      more.textContent = `+${entries.length - capAt} more`;
+      listEl.appendChild(more);
+    }
+  }
+  function renderHomeView() {
+    const todayKey = toDateKey(today);
+    const overdue = getHomeOverdueEntries();
+    const todayList = tasksForDate(todayKey).sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
+    const todayEntries = todayList.map((t) => ({ task: t, dateKey: todayKey }));
+    const upcoming = getHomeUpcomingEntries();
+
+    renderHomeSection(el.homeOverdueSection, el.homeOverdueList, overdue, null, HOME_OVERDUE_SHOWN);
+    renderHomeSection(el.homeTodaySection, el.homeTodayList, todayEntries, "No tasks logged for today.", null);
+    renderHomeSection(el.homeUpcomingSection, el.homeUpcomingList, upcoming, "Nothing scheduled in the next 7 days.", HOME_UPCOMING_SHOWN);
+
+    el.homeStats.innerHTML = "";
+    const todayDone = todayList.filter((t) => isDoneOn(t, todayKey)).length;
+    const stats = [
+      { value: String(overdue.length), label: "overdue", tone: overdue.length > 0 ? "danger" : "" },
+      { value: `${todayDone}/${todayList.length}`, label: "today" },
+      { value: String(upcoming.length), label: "upcoming (7d)" },
+    ];
+    stats.forEach((s) => {
+      const box = document.createElement("div");
+      box.className = "home-stat" + (s.tone ? " " + s.tone : "");
+      const v = document.createElement("span"); v.className = "home-stat-value"; v.textContent = s.value;
+      const l = document.createElement("span"); l.className = "home-stat-label"; l.textContent = s.label;
+      box.append(v, l);
+      el.homeStats.appendChild(box);
+    });
+  }
+
   // ---------- Board view (tasks grouped by client/project tag, across all dates) ----------
   function getAllFilteredTasks() {
     let list = tasks.slice();
@@ -1875,8 +1975,8 @@
 
     return section;
   }
-  function buildBoardTaskRow(task) {
-    const dateKey = task.startDate;
+  function buildBoardTaskRow(task, dateKey) {
+    dateKey = dateKey || task.startDate;
     const done = isDoneOn(task, dateKey);
     const row = document.createElement("div");
     row.className = "board-task-row cat-" + (CATEGORIES[task.category] ? task.category : "other") + (done ? " done" : "")
@@ -3444,6 +3544,7 @@
   populateMonthYearSelects();
   renderCategoryChips();
   renderPriorityChips();
+  updateViewStatusBadge();
   renderAll();
 
   const splash = document.getElementById("splashScreen");

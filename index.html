@@ -100,12 +100,13 @@
 
   <div class="view-tabs-row">
     <div class="view-tabs" id="viewTabs" role="tablist" aria-label="View">
-      <button type="button" class="view-tab active" data-view="day" role="tab" aria-selected="true">Day</button>
+      <button type="button" class="view-tab active" data-view="home" role="tab" aria-selected="true">Home</button>
+      <button type="button" class="view-tab" data-view="day" role="tab" aria-selected="false">Day</button>
       <button type="button" class="view-tab" data-view="week" role="tab" aria-selected="false">Week</button>
       <button type="button" class="view-tab" data-view="timeline" role="tab" aria-selected="false">Timeline</button>
       <button type="button" class="view-tab" data-view="board" role="tab" aria-selected="false">Board</button>
     </div>
-    <button type="button" class="select-mode-btn" id="selectModeBtn"><span class="icon" data-icon="checkbox"></span> Select</button>
+    <button type="button" class="select-mode-btn" id="selectModeBtn" hidden><span class="icon" data-icon="checkbox"></span> Select</button>
     <span class="view-status-badge" id="viewStatusBadge">0/0 done</span>
   </div>
 
@@ -144,7 +145,7 @@
     </aside>
 
     <div class="app-main">
-      <section class="toolbar" id="toolbar">
+      <section class="toolbar" id="toolbar" hidden>
         <div class="toolbar-search">
           <span class="toolbar-search-icon" data-icon="search"></span>
           <input type="search" id="searchInput" placeholder="Search tasks… (/)" aria-label="Search tasks" />
@@ -169,7 +170,23 @@
         </div>
       </section>
 
-      <main class="punchlist is-loading" id="dayView">
+      <div class="home-view" id="homeView">
+        <div class="home-stats" id="homeStats"></div>
+        <section class="home-section" id="homeOverdueSection" hidden>
+          <h3 class="home-section-title home-section-title-overdue"><span class="icon" data-icon="alertTriangle"></span> Overdue</h3>
+          <div class="home-section-list" id="homeOverdueList"></div>
+        </section>
+        <section class="home-section" id="homeTodaySection">
+          <h3 class="home-section-title"><span class="icon" data-icon="checkCircle"></span> Today</h3>
+          <div class="home-section-list" id="homeTodayList"></div>
+        </section>
+        <section class="home-section" id="homeUpcomingSection">
+          <h3 class="home-section-title"><span class="icon" data-icon="calendar"></span> Upcoming</h3>
+          <div class="home-section-list" id="homeUpcomingList"></div>
+        </section>
+      </div>
+
+      <main class="punchlist is-loading" id="dayView" hidden>
         <div class="punchlist-header">
           <span class="col-no">NO.</span>
           <span class="col-check" data-icon="check"></span>
