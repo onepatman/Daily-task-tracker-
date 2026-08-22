@@ -255,6 +255,8 @@
     dayDetailBody: document.getElementById("dayDetailBody"),
     closeDayDetail: document.getElementById("closeDayDetail"),
     dayDetailViewFull: document.getElementById("dayDetailViewFull"),
+    dayDetailEditBtn: document.getElementById("dayDetailEditBtn"),
+    dayDetailDeleteBtn: document.getElementById("dayDetailDeleteBtn"),
     snackbar: document.getElementById("snackbar"),
     snackbarText: document.getElementById("snackbarText"),
     snackbarUndo: document.getElementById("snackbarUndo"),
@@ -1609,9 +1611,13 @@
       if (!dayDetailTask || !tasks.includes(dayDetailTask) || !occursOn(dayDetailTask, dayDetailDateKey)) { closeDayDetail(); return; }
       el.dayDetailTitle.textContent = dayDetailTask.title;
       el.dayDetailBody.appendChild(buildDayDetailCard(dayDetailTask, dayDetailDateKey, false));
+      el.dayDetailEditBtn.hidden = false;
+      el.dayDetailDeleteBtn.hidden = false;
       return;
     }
 
+    el.dayDetailEditBtn.hidden = true;
+    el.dayDetailDeleteBtn.hidden = true;
     const dateObj = parseDateKey(dayDetailDateKey);
     el.dayDetailTitle.textContent = `${DAY_NAMES[dateObj.getDay()]}, ${MONTHS[dateObj.getMonth()].slice(0, 3)} ${dateObj.getDate()}`;
     const list = tasksForDate(dayDetailDateKey).sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
@@ -1748,6 +1754,16 @@
     return card;
   }
   el.closeDayDetail.addEventListener("click", closeDayDetail);
+  el.dayDetailEditBtn.addEventListener("click", () => {
+    if (!dayDetailTask) return;
+    const task = dayDetailTask, dateKey = dayDetailDateKey;
+    closeDayDetail();
+    openEditModal(task, dateKey);
+  });
+  el.dayDetailDeleteBtn.addEventListener("click", () => {
+    if (!dayDetailTask) return;
+    requestDelete(dayDetailTask, dayDetailDateKey);
+  });
   el.dayDetailOverlay.addEventListener("click", (e) => { if (e.target === el.dayDetailOverlay) closeDayDetail(); });
   el.dayDetailViewFull.addEventListener("click", () => {
     const key = dayDetailDateKey;
