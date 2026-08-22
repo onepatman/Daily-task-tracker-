@@ -53,6 +53,15 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
+/* ---------- Text size ----------
+   Nearly every font-size in this file is px, not rem, so scaling the root
+   font-size wouldn't cascade to any of it. `zoom` scales the whole rendered
+   page proportionally instead -- text, spacing, tap targets together --
+   which is exactly what "readability for field use in bright sunlight"
+   needs, and has broad support across the mobile browsers this app targets. */
+:root[data-text-size="large"] { zoom: 1.15; }
+:root[data-text-size="xlarge"] { zoom: 1.3; }
+
 /* ---------- Icons ----------
    Inline SVG instead of emoji: emoji render as a different glyph set on
    every phone brand/OS (colors, weights, even shapes vary), which reads

@@ -4,6 +4,7 @@
   const STORAGE_KEY = "dailyLog.tasks.v1";
   const THEME_KEY = "dailyLog.theme";
   const ACCENT_KEY = "dailyLog.accent";
+  const TEXT_SIZE_KEY = "dailyLog.textSize";
   const TEMPLATES_KEY = "dailyLog.templates.v1";
   const FILTERS_KEY = "dailyLog.filters";
   const MONTHS = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY",
@@ -135,6 +136,7 @@
     sheetDateFull: document.getElementById("sheetDateFull"),
     themeToggle: document.getElementById("themeToggle"),
     themeChoices: document.getElementById("themeChoices"),
+    textSizeChoices: document.getElementById("textSizeChoices"),
     syncStatusPill: document.getElementById("syncStatusPill"),
     accentSwatches: document.getElementById("accentSwatches"),
     moreMenuBtn: document.getElementById("moreMenuBtn"),
@@ -635,6 +637,31 @@
       });
     });
   }
+
+  // ---------- Text size ----------
+  function getTextSizePref() {
+    const saved = localStorage.getItem(TEXT_SIZE_KEY);
+    return saved === "large" || saved === "xlarge" ? saved : "normal";
+  }
+  function applyTextSize(pref) {
+    document.documentElement.setAttribute("data-text-size", pref);
+    if (el.textSizeChoices) {
+      el.textSizeChoices.querySelectorAll(".theme-choice-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.textSizeChoice === pref);
+      });
+    }
+  }
+  if (el.textSizeChoices) {
+    el.textSizeChoices.querySelectorAll(".theme-choice-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const choice = btn.dataset.textSizeChoice;
+        if (choice === "normal") localStorage.removeItem(TEXT_SIZE_KEY);
+        else localStorage.setItem(TEXT_SIZE_KEY, choice);
+        applyTextSize(choice);
+      });
+    });
+  }
+  applyTextSize(getTextSizePref());
 
   // ---------- Accent color ----------
   const ACCENT_SWATCHES = [
