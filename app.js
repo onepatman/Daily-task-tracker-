@@ -833,7 +833,10 @@
     else if (currentView === "week") renderWeekView();
     else if (currentView === "timeline") renderTimelineView();
     else if (currentView === "board") renderBoardView();
-    else renderSheet();
+    else {
+      renderSheet();
+      maybeShowSwipeHint();
+    }
   }
 
   // ---------- Month / year navigation ----------
@@ -3536,6 +3539,93 @@
     });
   }
 
+  // ---------- Onboarding coach hints ----------
+  const HINTS_SEEN_KEY = "dailyLog.hintsSeen.v1";
+  const hintsShownThisSession = new Set();
+  let activeHintEl = null;
+  let activeHintOutsideClickHandler = null;
+
+  function getSeenHints() {
+    try { return JSON.parse(localStorage.getItem(HINTS_SEEN_KEY)) || {}; } catch { return {}; }
+  }
+  function markHintSeen(key) {
+    const seen = getSeenHints();
+    seen[key] = true;
+    localStorage.setItem(HINTS_SEEN_KEY, JSON.stringify(seen));
+  }
+  function dismissHint() {
+    if (activeHintOutsideClickHandler) {
+      document.removeEventListener("click", activeHintOutsideClickHandler);
+      activeHintOutsideClickHandler = null;
+    }
+    if (activeHintEl) { activeHintEl.remove(); activeHintEl = null; }
+  }
+  function showCoachHint(key, targetEl, text, placement) {
+    if (hintsShownThisSession.has(key) || getSeenHints()[key] || !targetEl) return;
+    hintsShownThisSession.add(key);
+    markHintSeen(key);
+    dismissHint();
+
+    const bubble = document.createElement("div");
+    bubble.className = "coach-hint";
+    const p = document.createElement("p");
+    p.className = "coach-hint-text";
+    p.textContent = text;
+    const actions = document.createElement("div");
+    actions.className = "coach-hint-actions";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = "Got it";
+    btn.addEventListener("click", dismissHint);
+    actions.appendChild(btn);
+    bubble.append(p, actions);
+    document.body.appendChild(bubble);
+
+    const rect = targetEl.getBoundingClientRect();
+    const bubbleRect = bubble.getBoundingClientRect();
+    let top, arrowSide;
+    if (placement === "above") {
+      top = rect.top - bubbleRect.height - 10;
+      arrowSide = "bottom";
+    } else {
+      top = rect.bottom + 10;
+      arrowSide = "top";
+    }
+    top = Math.max(8, Math.min(top, window.innerHeight - bubbleRect.height - 8));
+    let left = rect.left + rect.width / 2 - bubbleRect.width / 2;
+    left = Math.max(12, Math.min(left, window.innerWidth - bubbleRect.width - 12));
+    bubble.style.top = `${top}px`;
+    bubble.style.left = `${left}px`;
+
+    const arrow = document.createElement("div");
+    arrow.className = `coach-hint-arrow ${arrowSide}`;
+    const arrowLeft = Math.min(Math.max(rect.left + rect.width / 2 - left - 5, 10), bubbleRect.width - 20);
+    arrow.style.left = `${arrowLeft}px`;
+    bubble.appendChild(arrow);
+
+    activeHintEl = bubble;
+    setTimeout(() => { if (activeHintEl === bubble) dismissHint(); }, 8000);
+    const outsideClickHandler = (e) => {
+      if (bubble.contains(e.target)) return;
+      dismissHint();
+    };
+    activeHintOutsideClickHandler = outsideClickHandler;
+    setTimeout(() => {
+      if (activeHintOutsideClickHandler === outsideClickHandler) {
+        document.addEventListener("click", outsideClickHandler);
+      }
+    }, 50);
+  }
+  function maybeShowTabsHint() {
+    showCoachHint("tabs", el.viewTabs, "New: Home shows what's overdue and due soon. Board groups your tasks by client/project.", "below");
+  }
+  function maybeShowSwipeHint() {
+    if (hintsShownThisSession.has("swipe") || getSeenHints().swipe) return;
+    const firstRow = el.taskList.querySelector(".task-row");
+    if (!firstRow) return;
+    showCoachHint("swipe", firstRow, "Swipe right to complete, swipe left to delete. Long-press a task to move it to another date.", "below");
+  }
+
   // ---------- Init ----------
   hydrateIcons();
   initTheme();
@@ -3561,4 +3651,5 @@
   } else {
     el.punchlist.classList.remove("is-loading");
   }
+  setTimeout(maybeShowTabsHint, splash ? 1450 : 500);
 })();
