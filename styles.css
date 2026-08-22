@@ -1810,6 +1810,57 @@ html, body {
 }
 .snackbar-dismiss { color: var(--text-faint) !important; font-weight: 400 !important; font-size: 12px !important; }
 
+/* ---------- Onboarding coach hints ---------- */
+.coach-hint {
+  position: fixed;
+  z-index: 60;
+  max-width: 260px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: coach-hint-in 0.2s ease;
+}
+@keyframes coach-hint-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.coach-hint-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.coach-hint-arrow {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+.coach-hint-arrow.top { top: -6px; border-right: none; border-bottom: none; }
+.coach-hint-arrow.bottom { bottom: -6px; border-left: none; border-top: none; }
+.coach-hint-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.coach-hint-actions button {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 /* ---------- Reminder snooze ---------- */
 .btn-snooze { font-size: 12px; white-space: nowrap; }
 
