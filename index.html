@@ -379,8 +379,28 @@
         <option value="daily">Daily</option>
         <option value="weekdays">Weekdays (Mon–Fri)</option>
         <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+        <option value="custom">Custom days…</option>
       </select>
     </label>
+
+    <div class="repeat-days-field" id="repeatDaysField" hidden>
+      <span class="repeat-days-label">Repeat on</span>
+      <div class="repeat-days" id="repeatDays"></div>
+    </div>
+
+    <div class="field-row" id="repeatUntilField" hidden>
+      <label>Repeat until
+        <div class="repeat-until-row">
+          <button type="button" id="repeatUntilBtn" class="picker-trigger">
+            <span id="repeatUntilDisplay">No end date</span>
+            <span class="picker-trigger-icon" data-icon="calendar"></span>
+          </button>
+          <button type="button" id="repeatUntilClear" class="repeat-until-clear" hidden>Clear</button>
+        </div>
+        <input type="hidden" id="repeatUntil" />
+      </label>
+    </div>
 
     <label class="checkbox-row">
       <input type="checkbox" id="taskReminder" checked />

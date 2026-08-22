@@ -210,6 +210,13 @@
     taskTitle: document.getElementById("taskTitle"),
     taskDate: document.getElementById("taskDate"),
     taskDateBtn: document.getElementById("taskDateBtn"),
+    repeatDaysField: document.getElementById("repeatDaysField"),
+    repeatDays: document.getElementById("repeatDays"),
+    repeatUntilField: document.getElementById("repeatUntilField"),
+    repeatUntilBtn: document.getElementById("repeatUntilBtn"),
+    repeatUntilDisplay: document.getElementById("repeatUntilDisplay"),
+    repeatUntil: document.getElementById("repeatUntil"),
+    repeatUntilClear: document.getElementById("repeatUntilClear"),
     taskDateDisplay: document.getElementById("taskDateDisplay"),
     datePickerPopover: document.getElementById("datePickerPopover"),
     dpPrev: document.getElementById("dpPrev"),
@@ -330,6 +337,8 @@
   // ---------- Persistence & migration ----------
   function migrateTask(t) {
     if (t.endTime === undefined) t.endTime = "";
+    if (t.repeatDays === undefined) t.repeatDays = [];
+    if (t.repeatUntil === undefined) t.repeatUntil = "";
     if (t.repeat !== undefined) return t;
     return {
       id: t.id,
@@ -342,6 +351,8 @@
       notes: t.notes || "",
       subtasks: t.subtasks || [],
       repeat: "none",
+      repeatDays: [],
+      repeatUntil: "",
       startDate: t.date,
       done: !!t.done,
       notified: !!t.notified,
@@ -391,10 +402,27 @@
   function matchesRepeat(task, dateObj) {
     const startObj = parseDateKey(task.startDate);
     if (dateObj < startObj) return false;
+    if (task.repeatUntil && toDateKey(dateObj) > task.repeatUntil) return false;
     if (task.repeat === "daily") return true;
     if (task.repeat === "weekdays") { const wd = dateObj.getDay(); return wd >= 1 && wd <= 5; }
     if (task.repeat === "weekly") return dateObj.getDay() === startObj.getDay();
+    if (task.repeat === "custom") return (task.repeatDays || []).includes(dateObj.getDay());
+    if (task.repeat === "monthly") {
+      // Clamp to the last day of shorter months so a task started on the 31st
+      // still lands once in February and the 30-day months, rather than
+      // silently skipping them.
+      const lastOfMonth = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate();
+      return dateObj.getDate() === Math.min(startObj.getDate(), lastOfMonth);
+    }
     return false;
+  }
+  function repeatLabel(task) {
+    if (task.repeat === "custom") {
+      const days = (task.repeatDays || []).slice().sort();
+      if (!days.length) return "custom";
+      return days.map((d) => DAY_NAMES[d].slice(0, 3)).join(" ");
+    }
+    return task.repeat;
   }
   function occursOn(task, dateKey) {
     if (task.repeat === "none") return task.startDate === dateKey;
@@ -738,7 +766,7 @@
     // captured at dispatch time, so it stays valid either way.
     const path = e.composedPath();
     if (!el.moreMenu.hidden && !path.includes(el.moreMenuBtn) && !path.includes(el.moreMenu)) closeMoreMenu();
-    if (!el.datePickerPopover.hidden && !path.includes(el.taskDateBtn) && !path.includes(el.datePickerPopover)) closeDatePicker();
+    if (!el.datePickerPopover.hidden && !path.includes(el.taskDateBtn) && !path.includes(el.repeatUntilBtn) && !path.includes(el.datePickerPopover)) closeDatePicker();
     if (!el.timePickerPopover.hidden && !path.includes(el.taskTimeBtn) && !path.includes(el.taskEndTimeBtn) && !path.includes(el.timePickerPopover)) closeTimePicker();
   });
 
@@ -1696,7 +1724,7 @@
     if (task.repeat && task.repeat !== "none") {
       const rep = document.createElement("span");
       rep.className = "task-priority";
-      rep.innerHTML = iconSvg("repeat") + " " + task.repeat;
+      rep.innerHTML = iconSvg("repeat") + " " + repeatLabel(task);
       meta.appendChild(rep);
     }
     if (task.subtasks && task.subtasks.length) {
@@ -2994,18 +3022,77 @@
   });
 
   // ---------- Date picker (modal) ----------
-  function openDatePicker() {
-    const base = el.taskDate.value ? parseDateKey(el.taskDate.value) : new Date();
+  // ---------- Repeat sub-fields (custom weekdays + end date) ----------
+  let modalRepeatDays = [];
+
+  function renderRepeatDays() {
+    el.repeatDays.innerHTML = "";
+    DAY_NAMES.forEach((name, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "repeat-day" + (modalRepeatDays.includes(idx) ? " active" : "");
+      btn.textContent = name[0];
+      btn.setAttribute("aria-label", name);
+      btn.setAttribute("aria-pressed", modalRepeatDays.includes(idx) ? "true" : "false");
+      btn.addEventListener("click", () => {
+        if (modalRepeatDays.includes(idx)) modalRepeatDays = modalRepeatDays.filter((d) => d !== idx);
+        else modalRepeatDays = modalRepeatDays.concat(idx).sort();
+        renderRepeatDays();
+      });
+      el.repeatDays.appendChild(btn);
+    });
+  }
+  function syncRepeatFields() {
+    const mode = el.taskRepeat.value;
+    el.repeatDaysField.hidden = mode !== "custom";
+    el.repeatUntilField.hidden = mode === "none";
+    if (mode === "none" && dpTarget === DP_TARGETS.repeatUntil) closeDatePicker();
+  }
+  function resetRepeatFields(task) {
+    modalRepeatDays = task && task.repeatDays ? task.repeatDays.slice() : [];
+    renderRepeatDays();
+    const until = (task && task.repeatUntil) || "";
+    el.repeatUntil.value = until;
+    el.repeatUntilDisplay.textContent = until ? formatDateDisplay(until) : "No end date";
+    el.repeatUntilClear.hidden = !until;
+    syncRepeatFields();
+  }
+
+  // The picker is an inline panel rather than a floating popover, so opening it
+  // for a given field also means relocating it to sit directly under that
+  // field. Two fields share it: the task's own date and the repeat end date.
+  const DP_TARGETS = {
+    taskDate: {
+      get input() { return el.taskDate; },
+      get display() { return el.taskDateDisplay; },
+      get btn() { return el.taskDateBtn; },
+      get anchor() { return el.taskDateBtn.closest(".field-row"); },
+      onPick: null,
+    },
+    repeatUntil: {
+      get input() { return el.repeatUntil; },
+      get display() { return el.repeatUntilDisplay; },
+      get btn() { return el.repeatUntilBtn; },
+      get anchor() { return el.repeatUntilField; },
+      onPick: () => { el.repeatUntilClear.hidden = false; },
+    },
+  };
+  let dpTarget = DP_TARGETS.taskDate;
+
+  function openDatePicker(target) {
+    dpTarget = target || DP_TARGETS.taskDate;
+    dpTarget.anchor.insertAdjacentElement("afterend", el.datePickerPopover);
+    const base = dpTarget.input.value ? parseDateKey(dpTarget.input.value) : new Date();
     dpViewYear = base.getFullYear();
     dpViewMonth = base.getMonth();
     renderDatePicker();
     el.datePickerPopover.hidden = false;
-    el.taskDateBtn.classList.add("active");
+    dpTarget.btn.classList.add("active");
     closeTimePicker();
   }
   function closeDatePicker() {
     el.datePickerPopover.hidden = true;
-    el.taskDateBtn.classList.remove("active");
+    Object.values(DP_TARGETS).forEach((t) => t.btn.classList.remove("active"));
   }
   function renderDatePicker() {
     el.dpMonthYear.textContent = `${MONTHS[dpViewMonth]} ${dpViewYear}`;
@@ -3025,11 +3112,13 @@
       btn.type = "button";
       btn.className = "dp-day";
       if (key === toDateKey(today)) btn.classList.add("today");
-      if (key === el.taskDate.value) btn.classList.add("selected");
+      if (key === dpTarget.input.value) btn.classList.add("selected");
       btn.textContent = String(day);
       btn.addEventListener("click", () => {
-        el.taskDate.value = key;
-        el.taskDateDisplay.textContent = formatDateDisplay(key);
+        const target = dpTarget;
+        target.input.value = key;
+        target.display.textContent = formatDateDisplay(key);
+        if (target.onPick) target.onPick();
         closeDatePicker();
       });
       el.dpGrid.appendChild(btn);
@@ -3045,7 +3134,31 @@
   });
   el.taskDateBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    if (el.datePickerPopover.hidden) openDatePicker(); else closeDatePicker();
+    const reopen = el.datePickerPopover.hidden || dpTarget !== DP_TARGETS.taskDate;
+    closeDatePicker();
+    if (reopen) openDatePicker(DP_TARGETS.taskDate);
+  });
+  el.repeatUntilBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const reopen = el.datePickerPopover.hidden || dpTarget !== DP_TARGETS.repeatUntil;
+    closeDatePicker();
+    if (reopen) openDatePicker(DP_TARGETS.repeatUntil);
+  });
+  el.taskRepeat.addEventListener("change", () => {
+    // Default a fresh "custom" selection to the task's own weekday so the
+    // schedule is never silently empty (an empty repeatDays matches nothing).
+    if (el.taskRepeat.value === "custom" && modalRepeatDays.length === 0) {
+      const base = el.taskDate.value ? parseDateKey(el.taskDate.value) : new Date();
+      modalRepeatDays = [base.getDay()];
+      renderRepeatDays();
+    }
+    syncRepeatFields();
+  });
+  el.repeatUntilClear.addEventListener("click", () => {
+    el.repeatUntil.value = "";
+    el.repeatUntilDisplay.textContent = "No end date";
+    el.repeatUntilClear.hidden = true;
+    if (dpTarget === DP_TARGETS.repeatUntil) closeDatePicker();
   });
 
   // ---------- Analog time picker (modal) ----------
@@ -3309,6 +3422,7 @@
     el.taskPriority.value = "medium";
     el.taskTag.value = "";
     el.taskRepeat.value = "none";
+    resetRepeatFields(null);
     el.taskReminder.checked = true;
     el.templateRow.hidden = false;
     renderTemplateOptions();
@@ -3333,6 +3447,7 @@
     el.taskEndTime.value = task.endTime || "";
     el.taskEndTimeDisplay.textContent = task.endTime ? formatTimeDisplay(task.endTime) : "No time set";
     el.taskRepeat.value = task.repeat;
+    resetRepeatFields(task);
     el.taskReminder.checked = task.reminder;
     el.taskTag.value = task.tag || "";
     el.taskNotes.value = task.notes || "";
@@ -3375,16 +3490,26 @@
     const notes = el.taskNotes.value.trim();
     const tag = el.taskTag.value.trim();
     const repeat = el.taskRepeat.value;
+    const repeatDays = repeat === "custom" ? modalRepeatDays.slice().sort() : [];
+    const repeatUntil = repeat === "none" ? "" : (el.repeatUntil.value || "");
+    if (repeat === "custom" && repeatDays.length === 0) {
+      showConfirm("Pick at least one day for a custom repeat.", [{ label: "OK" }]);
+      return;
+    }
+    if (repeatUntil && repeatUntil < startDate) {
+      showConfirm("The repeat end date can't be before the task's own date.", [{ label: "OK" }]);
+      return;
+    }
     const subtasks = modalSubtasks.map((s) => ({ id: s.id, title: s.title, done: !!s.done }));
     const photo = modalPhoto;
 
     if (editingTask) {
-      Object.assign(editingTask, { title, category, priority, time, endTime, reminder, notes, tag, repeat, subtasks, startDate, photo });
+      Object.assign(editingTask, { title, category, priority, time, endTime, reminder, notes, tag, repeat, repeatDays, repeatUntil, subtasks, startDate, photo });
     } else {
       tasks.push({
         id: uid(),
         title, category, priority, time, endTime, reminder, notes, tag, subtasks, photo,
-        repeat,
+        repeat, repeatDays, repeatUntil,
         startDate,
         done: false,
         notified: false,
