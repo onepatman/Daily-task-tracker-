@@ -181,6 +181,7 @@
     dayView: document.getElementById("dayView"),
     weekView: document.getElementById("weekView"),
     timelineView: document.getElementById("timelineView"),
+    boardView: document.getElementById("boardView"),
     printSheetTitle: document.getElementById("printSheetTitle"),
     printPeriod: document.getElementById("printPeriod"),
     printGenerated: document.getElementById("printGenerated"),
@@ -741,8 +742,9 @@
     el.dayView.hidden = view !== "day";
     el.weekView.hidden = view !== "week";
     el.timelineView.hidden = view !== "timeline";
+    el.boardView.hidden = view !== "board";
     if (changed) {
-      const activeEl = view === "day" ? el.dayView : view === "week" ? el.weekView : el.timelineView;
+      const activeEl = view === "day" ? el.dayView : view === "week" ? el.weekView : view === "timeline" ? el.timelineView : el.boardView;
       activeEl.classList.remove("view-entering");
       void activeEl.offsetWidth; // restart the animation even if it's still playing
       activeEl.classList.add("view-entering");
@@ -818,6 +820,7 @@
   function renderCurrentView() {
     if (currentView === "week") renderWeekView();
     else if (currentView === "timeline") renderTimelineView();
+    else if (currentView === "board") renderBoardView();
     else renderSheet();
   }
 
@@ -1006,6 +1009,9 @@
         tasksForDate(key).forEach((t) => { total++; if (isDoneOn(t, key)) done++; });
       }
       el.viewStatusBadge.textContent = `${done}/${total} done this week`;
+    } else if (currentView === "board") {
+      const done = tasks.filter((t) => isDoneOn(t, t.startDate)).length;
+      el.viewStatusBadge.textContent = `${done}/${tasks.length} tasks done`;
     } else {
       const list = tasksForDate(selectedDate);
       const done = list.filter((t) => isDoneOn(t, selectedDate)).length;
@@ -1799,6 +1805,138 @@
     item.appendChild(ttl);
     item.addEventListener("click", () => openTaskDetail(t, selectedDate));
     return item;
+  }
+
+  // ---------- Board view (tasks grouped by client/project tag, across all dates) ----------
+  function getAllFilteredTasks() {
+    let list = tasks.slice();
+    const q = searchQuery.trim().toLowerCase();
+    if (q) list = list.filter((t) => t.title.toLowerCase().includes(q) || (t.notes || "").toLowerCase().includes(q) || (t.tag || "").toLowerCase().includes(q));
+    if (activeCategories.size) list = list.filter((t) => activeCategories.has(t.category));
+    if (activePriorities.size) list = list.filter((t) => activePriorities.has(t.priority));
+    return list;
+  }
+  function renderBoardView() {
+    el.boardView.innerHTML = "";
+    const list = getAllFilteredTasks();
+    if (list.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "board-empty";
+      empty.textContent = tasks.length === 0
+        ? "No tasks logged yet."
+        : "No tasks match your search or filters.";
+      el.boardView.appendChild(empty);
+      return;
+    }
+
+    const groups = new Map();
+    list.forEach((t) => {
+      const key = (t.tag || "").trim();
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(t);
+    });
+    const tagKeys = Array.from(groups.keys()).filter((k) => k !== "").sort((a, b) => a.localeCompare(b));
+    if (groups.has("")) tagKeys.push("");
+
+    tagKeys.forEach((tagKey) => {
+      const groupTasks = groups.get(tagKey).sort((a, b) =>
+        a.startDate.localeCompare(b.startDate) || (a.time || "99:99").localeCompare(b.time || "99:99"));
+      el.boardView.appendChild(buildBoardGroup(tagKey || "No client / project", groupTasks));
+    });
+  }
+  function buildBoardGroup(title, groupTasks) {
+    const section = document.createElement("div");
+    section.className = "board-group";
+
+    const head = document.createElement("div");
+    head.className = "board-group-head";
+    const ttl = document.createElement("span");
+    ttl.className = "board-group-title";
+    ttl.textContent = title;
+    head.appendChild(ttl);
+    const doneCount = groupTasks.filter((t) => isDoneOn(t, t.startDate)).length;
+    const count = document.createElement("span");
+    count.className = "board-group-count";
+    count.textContent = `${doneCount}/${groupTasks.length} done`;
+    head.appendChild(count);
+    section.appendChild(head);
+
+    const bar = document.createElement("div");
+    bar.className = "week-day-bar board-group-bar";
+    const fill = document.createElement("span");
+    fill.style.width = Math.round((doneCount / groupTasks.length) * 100) + "%";
+    bar.appendChild(fill);
+    section.appendChild(bar);
+
+    const list = document.createElement("div");
+    list.className = "board-group-tasks";
+    groupTasks.forEach((t) => list.appendChild(buildBoardTaskRow(t)));
+    section.appendChild(list);
+
+    return section;
+  }
+  function buildBoardTaskRow(task) {
+    const dateKey = task.startDate;
+    const done = isDoneOn(task, dateKey);
+    const row = document.createElement("div");
+    row.className = "board-task-row cat-" + (CATEGORIES[task.category] ? task.category : "other") + (done ? " done" : "")
+      + (isOverdue(dateKey, task, done) ? " overdue" : "");
+
+    const check = document.createElement("button");
+    check.type = "button";
+    check.className = "task-check";
+    check.setAttribute("aria-checked", done ? "true" : "false");
+    check.innerHTML = done ? iconSvg("check") : "";
+    check.addEventListener("click", (e) => { e.stopPropagation(); toggleDone(task.id, dateKey); });
+    row.appendChild(check);
+
+    const main = document.createElement("div");
+    main.className = "board-task-main";
+    const titleRow = document.createElement("div");
+    titleRow.className = "board-task-title-row";
+    const ttl = document.createElement("span");
+    ttl.className = "board-task-title" + (done ? " done" : "");
+    renderHighlightedText(ttl, task.title, searchQuery);
+    titleRow.appendChild(ttl);
+    if (task.repeat !== "none") {
+      const rep = document.createElement("span");
+      rep.className = "task-repeat-icon";
+      rep.innerHTML = iconSvg("repeat");
+      titleRow.appendChild(rep);
+    }
+    main.appendChild(titleRow);
+
+    const meta = document.createElement("div");
+    meta.className = "board-task-meta";
+    const dateObj = parseDateKey(dateKey);
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "task-priority";
+    dateSpan.textContent = `${MONTHS[dateObj.getMonth()].slice(0, 3)} ${dateObj.getDate()}` + (task.time ? `, ${timeRangeLabel(task)}` : "");
+    meta.appendChild(dateSpan);
+    const catInfo = CATEGORIES[task.category] || CATEGORIES.other;
+    const catChip = document.createElement("span");
+    catChip.className = "task-cat-chip";
+    catChip.style.background = catInfo.color;
+    catChip.textContent = catInfo.label;
+    meta.appendChild(catChip);
+    const pri = document.createElement("span");
+    pri.className = "task-priority";
+    const priDot = document.createElement("span");
+    priDot.className = "task-priority-dot " + task.priority;
+    pri.append(priDot, document.createTextNode(task.priority));
+    meta.appendChild(pri);
+    if (task.subtasks && task.subtasks.length) {
+      const subDone = task.subtasks.filter((s) => s.done).length;
+      const subProg = document.createElement("span");
+      subProg.className = "task-subtask-progress";
+      subProg.innerHTML = iconSvg("checkbox") + ` ${subDone}/${task.subtasks.length}`;
+      meta.appendChild(subProg);
+    }
+    main.appendChild(meta);
+    row.appendChild(main);
+
+    row.addEventListener("click", () => openTaskDetail(task, dateKey));
+    return row;
   }
 
   // ---------- Insights ----------

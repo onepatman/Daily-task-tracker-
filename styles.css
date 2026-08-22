@@ -1660,6 +1660,66 @@ html, body {
 }
 .timeline-unscheduled strong { display: block; margin-bottom: 6px; color: var(--text); font-size: 12px; letter-spacing: 0.05em; }
 
+/* ---------- Board view (tasks grouped by client/project tag) ---------- */
+.board-view {
+  margin: 12px 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.board-empty {
+  margin: 24px 0;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 14px;
+}
+.board-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  padding: 12px;
+}
+.board-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.board-group-title {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.board-group-count { font-size: 12px; color: var(--text-faint); font-family: var(--font-mono); flex-shrink: 0; }
+.board-group-bar { margin-bottom: 10px; }
+.board-group-tasks { display: flex; flex-direction: column; gap: 8px; }
+.board-task-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  background: var(--surface-2);
+  border-left: 4px solid var(--cat-other);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.board-task-row.cat-work { border-left-color: var(--cat-work); }
+.board-task-row.cat-personal { border-left-color: var(--cat-personal); }
+.board-task-row.cat-urgent { border-left-color: var(--cat-urgent); }
+.board-task-row.cat-health { border-left-color: var(--cat-health); }
+.board-task-row.cat-errands { border-left-color: var(--cat-errands); }
+.board-task-row.cat-other { border-left-color: var(--cat-other); }
+.board-task-row.overdue { background: color-mix(in srgb, var(--red) 9%, var(--surface-2)); }
+.board-task-main { flex: 1; min-width: 0; }
+.board-task-title-row { display: flex; align-items: center; gap: 6px; }
+.board-task-title { font-size: 14px; font-weight: 600; color: var(--text); word-break: break-word; }
+.board-task-title.done { text-decoration: line-through; color: var(--text-faint); }
+.board-task-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+
 /* ---------- Template picker (modal) ---------- */
 .template-row {
   display: flex;
