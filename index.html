@@ -173,7 +173,10 @@
       <div class="home-view" id="homeView">
         <div class="home-stats" id="homeStats"></div>
         <section class="home-section" id="homeOverdueSection" hidden>
-          <h3 class="home-section-title home-section-title-overdue"><span class="icon" data-icon="alertTriangle"></span> Overdue</h3>
+          <div class="home-section-head">
+            <h3 class="home-section-title home-section-title-overdue"><span class="icon" data-icon="alertTriangle"></span> Overdue</h3>
+            <button type="button" class="home-section-action" id="moveAllOverdueBtn">Move all to today</button>
+          </div>
           <div class="home-section-list" id="homeOverdueList"></div>
         </section>
         <section class="home-section" id="homeTodaySection">
