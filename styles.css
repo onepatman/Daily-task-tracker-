@@ -1615,6 +1615,14 @@ html, body {
 .week-task-row.done .week-task-title { text-decoration: line-through; color: var(--text-faint); }
 .week-task-time { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--text-soft); flex-shrink: 0; }
 .week-task-row.overdue .week-task-time { color: var(--red); }
+.week-task-urgent-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--red);
+  text-transform: uppercase;
+}
 .week-day-empty { font-size: 13px; color: var(--text-faint); padding: 4px 0; }
 
 /* ---------- Timeline view ---------- */
