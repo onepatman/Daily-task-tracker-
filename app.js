@@ -123,7 +123,7 @@
   let dayDetailTask = null;
   let selectMode = false;
   const selectedTaskIds = new Set();
-  let draggedTaskId = null;
+  let armedRescheduleTaskId = null;
 
   // ---------- Elements ----------
   const el = {
@@ -158,6 +158,9 @@
     bulkMarkDoneBtn: document.getElementById("bulkMarkDoneBtn"),
     bulkDeleteBtn: document.getElementById("bulkDeleteBtn"),
     bulkCancelBtn: document.getElementById("bulkCancelBtn"),
+    rescheduleBanner: document.getElementById("rescheduleBanner"),
+    rescheduleBannerText: document.getElementById("rescheduleBannerText"),
+    rescheduleCancelBtn: document.getElementById("rescheduleCancelBtn"),
     viewStatusBadge: document.getElementById("viewStatusBadge"),
     calendarGrid: document.getElementById("calendarGrid"),
     calendarSection: document.getElementById("calendarSection"),
@@ -730,6 +733,7 @@
   function setSelectMode(on) {
     selectMode = on;
     selectedTaskIds.clear();
+    if (on && armedRescheduleTaskId) disarmReschedule();
     el.selectModeBtn.classList.toggle("active", on);
     el.selectModeBtn.innerHTML = iconSvg(on ? "close" : "checkbox") + (on ? " Cancel" : " Select");
     updateBulkBar();
@@ -872,7 +876,14 @@
         btn.appendChild(dotsWrap);
       }
 
+      if (armedRescheduleTaskId) btn.classList.add("reschedule-target");
       btn.addEventListener("click", () => {
+        if (armedRescheduleTaskId) {
+          const id = armedRescheduleTaskId;
+          disarmReschedule();
+          rescheduleTask(id, key);
+          return;
+        }
         selectedDate = key;
         renderAll();
       });
@@ -1219,57 +1230,38 @@
 
   const RESCHEDULE_HOLD_MS = 450;
 
+  // ---------- Reschedule "arm, then tap a date" flow ----------
+  // An earlier version tracked a continuous drag from the task row to the
+  // calendar. That fought the task list's native vertical scrolling
+  // (touch-action: pan-y lets the browser claim vertical finger movement for
+  // scrolling before JS ever gets a say, even with preventDefault) -- the
+  // drag ghost would vanish almost instantly on a real phone. A long-press
+  // now just "arms" the task; the next tap on any calendar day completes the
+  // move. No continuous tracking, no fight with scrolling.
+  function armReschedule(task) {
+    armedRescheduleTaskId = task.id;
+    if (navigator.vibrate) navigator.vibrate(15);
+    if (!calendarOpen) el.calendarToggle.click();
+    el.calendarSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    renderCalendar();
+    el.rescheduleBanner.hidden = false;
+    el.rescheduleBannerText.textContent = `Tap a date to move "${task.title}"`;
+  }
+  function disarmReschedule() {
+    armedRescheduleTaskId = null;
+    el.rescheduleBanner.hidden = true;
+    renderCalendar();
+  }
+  el.rescheduleCancelBtn.addEventListener("click", disarmReschedule);
+
   function attachSwipe(row, task, dateKey) {
     let startX = 0, startY = 0, dx = 0, dragging = false, decided = false, isHorizontal = false;
     const THRESH = 64;
     let longPressTimer = null;
-    let rescheduling = false;
-    let activePointerId = null;
-    let ghost = null;
-    let hoveredCell = null;
 
     function clearLongPress() {
       clearTimeout(longPressTimer);
       longPressTimer = null;
-    }
-    function findDayCellAt(x, y) {
-      const hit = document.elementFromPoint(x, y);
-      return hit ? hit.closest(".cal-day:not(.blank)") : null;
-    }
-    function setHovered(cell) {
-      if (cell === hoveredCell) return;
-      if (hoveredCell) hoveredCell.classList.remove("drag-over");
-      hoveredCell = cell;
-      if (hoveredCell) hoveredCell.classList.add("drag-over");
-    }
-    function startReschedule(x, y) {
-      rescheduling = true;
-      draggedTaskId = task.id;
-      row.classList.add("dragging");
-      row.dataset.suppressClick = "1";
-      if (navigator.vibrate) navigator.vibrate(15);
-      if (!calendarOpen) el.calendarToggle.click();
-      el.calendarSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      ghost = document.createElement("div");
-      ghost.className = "reschedule-drag-ghost";
-      ghost.textContent = task.title;
-      document.body.appendChild(ghost);
-      moveGhost(x, y);
-      setHovered(findDayCellAt(x, y));
-    }
-    function moveGhost(x, y) {
-      if (!ghost) return;
-      ghost.style.left = x + "px";
-      ghost.style.top = y + "px";
-    }
-    function endReschedule(x, y) {
-      row.classList.remove("dragging");
-      if (ghost) { ghost.remove(); ghost = null; }
-      const cell = findDayCellAt(x, y);
-      setHovered(null);
-      draggedTaskId = null;
-      rescheduling = false;
-      if (cell && cell.dataset.dateKey) rescheduleTask(task.id, cell.dataset.dateKey);
     }
 
     row.addEventListener("pointerdown", (e) => {
@@ -1277,21 +1269,15 @@
       if (e.target.closest(".task-check, .task-edit-btn, .task-delete-btn, .task-select-checkbox")) return;
       startX = e.clientX; startY = e.clientY; dx = 0;
       dragging = true; decided = false; isHorizontal = false;
-      activePointerId = e.pointerId;
       clearLongPress();
       longPressTimer = setTimeout(() => {
         if (!dragging) return;
         decided = true;
-        try { row.setPointerCapture(activePointerId); } catch (err) { /* ignore */ }
-        startReschedule(e.clientX, e.clientY);
+        row.dataset.suppressClick = "1";
+        armReschedule(task);
       }, RESCHEDULE_HOLD_MS);
     });
     row.addEventListener("pointermove", (e) => {
-      if (rescheduling) {
-        moveGhost(e.clientX, e.clientY);
-        setHovered(findDayCellAt(e.clientX, e.clientY));
-        return;
-      }
       if (!dragging) return;
       const dxRaw = e.clientX - startX;
       const dyRaw = e.clientY - startY;
@@ -1307,14 +1293,8 @@
       row.style.transform = `translateX(${dx}px)`;
       row.dataset.suppressClick = "1";
     });
-    function end(e) {
+    function end() {
       clearLongPress();
-      if (rescheduling) {
-        try { row.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
-        endReschedule(e.clientX, e.clientY);
-        setTimeout(() => { row.dataset.suppressClick = "0"; }, 50);
-        return;
-      }
       if (!dragging) return;
       dragging = false;
       row.style.transform = "";
@@ -1336,14 +1316,12 @@
   function attachDrag(row, task) {
     row.addEventListener("dragstart", (e) => {
       if (!isManualSort()) { e.preventDefault(); return; }
-      draggedTaskId = task.id;
       row.classList.add("dragging");
       e.dataTransfer.setData("text/plain", task.id);
       e.dataTransfer.effectAllowed = "move";
     });
     row.addEventListener("dragend", () => {
       row.classList.remove("dragging");
-      draggedTaskId = null;
     });
     row.addEventListener("dragover", (e) => {
       if (!isManualSort()) return;
