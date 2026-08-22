@@ -1326,6 +1326,11 @@
     }
     row.addEventListener("pointerup", end);
     row.addEventListener("pointercancel", end);
+    // Belt-and-suspenders alongside the CSS touch-callout/user-select rules:
+    // some mobile browsers still fire their native long-press context menu
+    // (Reload/Download/Share/...) on a ~500ms hold regardless, which would
+    // hijack the reschedule gesture. Block it outright on task rows.
+    row.addEventListener("contextmenu", (e) => e.preventDefault());
   }
 
   function attachDrag(row, task) {
