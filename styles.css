@@ -494,10 +494,13 @@ html, body {
 }
 .cal-day.selected .cal-day-dot { background: var(--on-accent); }
 .cal-day.selected .cal-day-dot.more { color: var(--on-accent); }
-.cal-day.drag-over {
-  background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+.cal-day.reschedule-target {
   border-color: var(--accent);
-  transform: scale(1.06);
+  animation: reschedule-target-pulse 1.4s ease-in-out infinite;
+}
+@keyframes reschedule-target-pulse {
+  0%, 100% { background: var(--surface); }
+  50% { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
 }
 
 .calendar-toggle, .insights-toggle {
@@ -939,22 +942,40 @@ html, body {
 }
 .task-delete-btn:active { background: color-mix(in srgb, var(--red) 20%, var(--surface-2)); }
 
-.reschedule-drag-ghost {
+.reschedule-banner {
   position: fixed;
-  z-index: 200;
-  transform: translate(-50%, -140%);
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
   background: var(--accent);
   color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 8px 14px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow);
-  pointer-events: none;
+  padding: 10px 12px 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 55;
+  font-size: 13px;
+  font-weight: 700;
+  max-width: calc(100vw - 32px);
+}
+.reschedule-banner .icon { width: 15px; height: 15px; flex-shrink: 0; }
+.reschedule-banner #rescheduleBannerText {
   white-space: nowrap;
-  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.reschedule-banner button {
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.18);
+  border: none;
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 7px;
 }
 
 .subtask-progress-bar {
