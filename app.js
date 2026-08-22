@@ -1192,12 +1192,7 @@
       meta.appendChild(tagChip);
     }
 
-    const pri = document.createElement("span");
-    pri.className = "task-priority";
-    const priDot = document.createElement("span");
-    priDot.className = "task-priority-dot " + task.priority;
-    pri.append(priDot, document.createTextNode(task.priority));
-    meta.appendChild(pri);
+    meta.appendChild(buildPriorityChip(task, dateKey, done));
 
     if (task.subtasks && task.subtasks.length) {
       const subDone = task.subtasks.filter((s) => s.done).length;
@@ -1449,6 +1444,20 @@
     return (due - now) / 60000 < -30;
   }
 
+  // Overdue tasks read as "URGENT!!!" regardless of their real priority --
+  // purely a display override so the badge grabs attention, without ever
+  // touching task.priority itself (filters, stats, and the original
+  // priority all stay intact once the task is done or rescheduled).
+  function buildPriorityChip(task, dateKey, doneFlag) {
+    const overdue = isOverdue(dateKey, task, doneFlag);
+    const pri = document.createElement("span");
+    pri.className = "task-priority" + (overdue ? " urgent" : "");
+    const priDot = document.createElement("span");
+    priDot.className = "task-priority-dot " + (overdue ? "urgent" : task.priority);
+    pri.append(priDot, document.createTextNode(overdue ? "URGENT!!!" : task.priority));
+    return pri;
+  }
+
   function toggleDone(id, dateKey) {
     const t = tasks.find((x) => x.id === id);
     if (!t) return;
@@ -1675,12 +1684,7 @@
       tagChip.textContent = task.tag;
       meta.appendChild(tagChip);
     }
-    const pri = document.createElement("span");
-    pri.className = "task-priority";
-    const priDot = document.createElement("span");
-    priDot.className = "task-priority-dot " + task.priority;
-    pri.append(priDot, document.createTextNode(task.priority));
-    meta.appendChild(pri);
+    meta.appendChild(buildPriorityChip(task, dateKey, done));
     if (task.repeat && task.repeat !== "none") {
       const rep = document.createElement("span");
       rep.className = "task-priority";
@@ -2038,12 +2042,7 @@
     catChip.style.background = catInfo.color;
     catChip.textContent = catInfo.label;
     meta.appendChild(catChip);
-    const pri = document.createElement("span");
-    pri.className = "task-priority";
-    const priDot = document.createElement("span");
-    priDot.className = "task-priority-dot " + task.priority;
-    pri.append(priDot, document.createTextNode(task.priority));
-    meta.appendChild(pri);
+    meta.appendChild(buildPriorityChip(task, dateKey, done));
     if (task.subtasks && task.subtasks.length) {
       const subDone = task.subtasks.filter((s) => s.done).length;
       const subProg = document.createElement("span");

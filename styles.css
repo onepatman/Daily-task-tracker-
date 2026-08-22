@@ -895,6 +895,20 @@ html, body {
 .task-priority-dot.high { background: var(--red); }
 .task-priority-dot.medium { background: var(--amber); }
 .task-priority-dot.low { background: var(--accent-2); }
+.task-priority.urgent { color: var(--red); font-weight: 800; letter-spacing: 0.02em; }
+.task-priority-dot.urgent {
+  background: var(--red);
+  width: 7px;
+  height: 7px;
+  animation: urgent-pulse 1.4s ease-in-out infinite;
+}
+@keyframes urgent-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--red) 55%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--red) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-priority-dot.urgent { animation: none; }
+}
 .task-tag-chip {
   font-size: 11px;
   font-weight: 600;
