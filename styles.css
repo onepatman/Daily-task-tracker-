@@ -1203,6 +1203,45 @@ html, body {
 }
 .picker-trigger-icon { flex-shrink: 0; margin-left: 8px; opacity: 0.75; }
 
+.repeat-days-field { margin: -6px 0 14px; }
+.repeat-days-label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+.repeat-days { display: flex; gap: 6px; }
+.repeat-day {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 9px 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.repeat-day.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+.repeat-until-row { display: flex; align-items: center; gap: 8px; }
+.repeat-until-row .picker-trigger { flex: 1; min-width: 0; }
+.repeat-until-clear {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--accent-2);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 4px;
+}
+
 .date-picker-popover, .time-picker-popover {
   position: relative;
   z-index: 5;
