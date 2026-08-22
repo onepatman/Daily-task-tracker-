@@ -183,6 +183,7 @@
     homeStats: document.getElementById("homeStats"),
     homeOverdueSection: document.getElementById("homeOverdueSection"),
     homeOverdueList: document.getElementById("homeOverdueList"),
+    moveAllOverdueBtn: document.getElementById("moveAllOverdueBtn"),
     homeTodaySection: document.getElementById("homeTodaySection"),
     homeTodayList: document.getElementById("homeTodayList"),
     homeUpcomingSection: document.getElementById("homeUpcomingSection"),
@@ -1860,14 +1861,29 @@
   const HOME_UPCOMING_LOOKAHEAD_DAYS = 7;
   const HOME_UPCOMING_SHOWN = 10;
 
+  // One entry per *task*, not per missed occurrence. A repeating task that has
+  // gone uncompleted for weeks would otherwise push one identical row per day
+  // (and inflate the overdue stat to match), burying the one-off tasks that
+  // actually need attention. Walking most-recent-day-first means the first
+  // sighting of a task is its latest overdue date; later sightings only bump
+  // missedCount.
   function getHomeOverdueEntries() {
-    const entries = []; // { task, dateKey }, most recent day first
+    // { task, dateKey, missedDateKeys }, most recent day first. dateKey is the
+    // latest missed day; missedDateKeys is every missed day within the lookback
+    // (one element for a one-off, potentially many for a repeating task).
+    const entries = [];
+    const byTaskId = new Map();
     const cursor = new Date(today);
     cursor.setDate(cursor.getDate() - 1);
     for (let i = 0; i < HOME_OVERDUE_LOOKBACK_DAYS; i++) {
       const key = toDateKey(cursor);
       tasksForDate(key).forEach((t) => {
-        if (!isDoneOn(t, key)) entries.push({ task: t, dateKey: key });
+        if (isDoneOn(t, key)) return;
+        const seen = byTaskId.get(t.id);
+        if (seen) { seen.missedDateKeys.push(key); return; }
+        const entry = { task: t, dateKey: key, missedDateKeys: [key] };
+        byTaskId.set(t.id, entry);
+        entries.push(entry);
       });
       cursor.setDate(cursor.getDate() - 1);
     }
@@ -1901,7 +1917,8 @@
     }
     sectionEl.hidden = false;
     const shown = capAt ? entries.slice(0, capAt) : entries;
-    shown.forEach(({ task, dateKey }) => listEl.appendChild(buildBoardTaskRow(task, dateKey)));
+    shown.forEach(({ task, dateKey, missedDateKeys }) =>
+      listEl.appendChild(buildBoardTaskRow(task, dateKey, missedDateKeys ? missedDateKeys.length : 0)));
     if (capAt && entries.length > capAt) {
       const more = document.createElement("p");
       more.className = "home-more";
@@ -1909,6 +1926,48 @@
       listEl.appendChild(more);
     }
   }
+  // Clears the whole Overdue backlog in one tap. One-off tasks are genuinely
+  // moved to today. Repeating tasks are NOT moved -- shifting startDate would
+  // drag every future occurrence along with it -- so their missed past days are
+  // marked skipped instead, which silences the backlog while leaving today's
+  // and all future runs on schedule.
+  function moveAllOverdueToToday() {
+    const todayKey = toDateKey(today);
+    const movedOneOffs = [];   // { task, oldDate }
+    const clearedRepeats = []; // { task, dateKeys }
+
+    getHomeOverdueEntries().forEach(({ task, missedDateKeys }) => {
+      if (task.repeat === "none") {
+        if (task.startDate === todayKey) return;
+        movedOneOffs.push({ task, oldDate: task.startDate });
+        task.startDate = todayKey;
+      } else {
+        const toSkip = missedDateKeys.filter((k) => !(task.skipped && task.skipped[k]));
+        if (!toSkip.length) return;
+        task.skipped = task.skipped || {};
+        toSkip.forEach((k) => { task.skipped[k] = true; });
+        clearedRepeats.push({ task, dateKeys: toSkip });
+      }
+    });
+
+    if (!movedOneOffs.length && !clearedRepeats.length) return;
+    saveTasks();
+    renderAll();
+
+    const parts = [];
+    if (movedOneOffs.length) parts.push(`${movedOneOffs.length} moved to today`);
+    if (clearedRepeats.length) parts.push(`${clearedRepeats.length} recurring cleared`);
+    showSnackbar(parts.join(" · "), () => {
+      movedOneOffs.forEach(({ task, oldDate }) => { task.startDate = oldDate; });
+      clearedRepeats.forEach(({ task, dateKeys }) => {
+        dateKeys.forEach((k) => { delete task.skipped[k]; });
+      });
+      saveTasks();
+      renderAll();
+    });
+  }
+  el.moveAllOverdueBtn.addEventListener("click", moveAllOverdueToToday);
+
   function renderHomeView() {
     const todayKey = toDateKey(today);
     const overdue = getHomeOverdueEntries();
@@ -2005,7 +2064,7 @@
 
     return section;
   }
-  function buildBoardTaskRow(task, dateKey) {
+  function buildBoardTaskRow(task, dateKey, missedCount) {
     dateKey = dateKey || task.startDate;
     const done = isDoneOn(task, dateKey);
     const row = document.createElement("div");
@@ -2050,6 +2109,12 @@
     catChip.textContent = catInfo.label;
     meta.appendChild(catChip);
     meta.appendChild(buildPriorityChip(task, dateKey, done));
+    if (missedCount > 1) {
+      const missed = document.createElement("span");
+      missed.className = "task-missed-chip";
+      missed.textContent = `missed ${missedCount}×`;
+      meta.appendChild(missed);
+    }
     if (task.subtasks && task.subtasks.length) {
       const subDone = task.subtasks.filter((s) => s.done).length;
       const subProg = document.createElement("span");
