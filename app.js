@@ -1550,7 +1550,8 @@
         dayTasks.slice(0, 6).forEach((t) => {
           const row = document.createElement("div");
           const tDone = isDoneOn(t, key);
-          row.className = "week-task-row" + (tDone ? " done" : "") + (isOverdue(key, t, tDone) ? " overdue" : "");
+          const tOverdue = isOverdue(key, t, tDone);
+          row.className = "week-task-row" + (tDone ? " done" : "") + (tOverdue ? " overdue" : "");
           const dot = document.createElement("span");
           dot.className = "week-task-cat-dot";
           dot.style.background = (CATEGORIES[t.category] || CATEGORIES.other).color;
@@ -1564,6 +1565,12 @@
             row.append(dot, time, ttl);
           } else {
             row.append(dot, ttl);
+          }
+          if (tOverdue) {
+            const urgent = document.createElement("span");
+            urgent.className = "week-task-urgent-badge";
+            urgent.textContent = "URGENT!!!";
+            row.appendChild(urgent);
           }
           list.appendChild(row);
           if (t.subtasks && t.subtasks.length) {
