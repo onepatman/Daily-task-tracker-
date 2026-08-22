@@ -451,7 +451,11 @@
         <h2 id="dayDetailTitle">—</h2>
         <button type="button" id="dayDetailViewFull" class="day-detail-viewfull">View full day →</button>
       </div>
-      <button type="button" id="closeDayDetail" aria-label="Close" data-icon="close"></button>
+      <div class="day-detail-header-actions">
+        <button type="button" id="dayDetailEditBtn" class="task-edit-btn" aria-label="Edit task" hidden><span class="icon" data-icon="pencil"></span></button>
+        <button type="button" id="dayDetailDeleteBtn" class="task-delete-btn" aria-label="Delete task" hidden><span class="icon" data-icon="trash"></span></button>
+        <button type="button" id="closeDayDetail" aria-label="Close" data-icon="close"></button>
+      </div>
     </div>
     <div class="day-detail-body" id="dayDetailBody"></div>
   </div>
