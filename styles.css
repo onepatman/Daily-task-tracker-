@@ -743,6 +743,13 @@ html, body {
   touch-action: pan-y;
   transition: transform 60ms linear, box-shadow 150ms ease;
   cursor: default;
+  /* The reschedule long-press is a genuine ~450ms hold -- without these,
+     mobile browsers treat that hold as "select text" / "show context menu"
+     and pop their own native menu (Reload/Download/Share/...) instead of
+     letting our pointer-driven drag take over. */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .task-row-line {
   display: grid;
