@@ -535,8 +535,8 @@ html, body {
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
   display: flex;
-  align-items: center;
-  gap: 16px;
+  flex-direction: column;
+  gap: 12px;
 }
 .insight-ring-wrap { position: relative; width: 64px; height: 64px; flex-shrink: 0; }
 .insight-ring { transform: rotate(-90deg); }
@@ -563,18 +563,41 @@ html, body {
 }
 .insight-ring-label span:first-child { font-size: 15px; font-weight: 700; font-family: var(--font-mono); color: var(--text); }
 .insight-ring-label span:last-child { font-size: 10px; color: var(--text-faint); letter-spacing: 0.05em; }
-.insight-stats { flex: 1; display: flex; align-items: center; gap: 14px; min-width: 0; }
-.insight-stat { text-align: center; flex-shrink: 0; }
-.insight-stat-value { display: block; font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: var(--accent); }
-.insight-stat-label { display: block; font-size: 11px; color: var(--text-faint); letter-spacing: 0.04em; }
-.insight-sparkline {
-  flex: 1;
+.insight-today { display: flex; align-items: center; gap: 14px; }
+.insight-today-text { min-width: 0; }
+.insight-headline {
   display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 36px;
-  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
 }
+.insight-headline .icon { width: 15px; height: 15px; color: var(--green); flex-shrink: 0; }
+.insight-sub { margin: 3px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-faint); }
+.insight-block { padding-top: 12px; border-top: 1px solid var(--border-soft); }
+.insight-block-title {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+/* Scoped to the insights chart so the weekly-review report, which reuses the
+   bare .spark-bar as a direct flex child, keeps its own layout. */
+.insight-sparkline { display: flex; gap: 4px; }
+.spark-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.insight-sparkline .spark-bar { flex: none; width: 100%; height: 36px; }
+.spark-day {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+.spark-day.is-today { color: var(--accent); }
 .spark-bar {
   flex: 1;
   min-width: 4px;
@@ -2245,8 +2268,8 @@ html, body {
   .app-sidebar .cal-day { font-size: 15px; border-radius: 12px; }
   .app-sidebar .calendar-weekdays { font-size: 13px; margin-bottom: 10px; }
   .app-sidebar .insights-panel { margin: 12px 0 0; padding: 18px; }
-  .insight-stat-value { font-size: 22px; }
-  .insight-stat-label { font-size: 11px; }
+  .insight-headline { font-size: 15px; }
+  .insight-sub { font-size: 13px; }
   .insight-ring-label span:first-child { font-size: 15px; }
 
   .app-main { min-width: 0; }
@@ -2326,8 +2349,8 @@ html, body {
 
   .app-sidebar .cal-day { font-size: 17px; }
   .app-sidebar .calendar-weekdays { font-size: 14px; }
-  .insight-stat-value { font-size: 26px; }
-  .insight-stat-label { font-size: 12px; }
+  .insight-headline { font-size: 16px; }
+  .insight-sub { font-size: 13.5px; }
   .insight-ring-label span:first-child { font-size: 17px; }
   .insights-panel { padding: 20px; }
 
