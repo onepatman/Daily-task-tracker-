@@ -831,6 +831,14 @@ html, body {
   border-color: color-mix(in srgb, var(--red) 40%, var(--border));
 }
 .task-row.overdue .task-time-inline { color: var(--red); font-weight: 800; }
+/* High priority reads through weight and an inner rule rather than a background
+   tint, because the red tint already means overdue -- a task can be both, and
+   the two states need to stay tellable apart. */
+.task-row.is-high, .board-task-row.is-high {
+  box-shadow: inset 3px 0 0 -1px transparent, 0 0 0 1px color-mix(in srgb, var(--red) 26%, transparent);
+}
+.task-row.is-high .task-title,
+.board-task-row.is-high .board-task-title { font-weight: 800; }
 
 .task-no {
   font-family: var(--font-mono);
@@ -955,20 +963,39 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .task-priority-dot.urgent { animation: none; }
 }
+/* --tag-hue is set per chip in JS from the tag's own name; the neutral values
+   here are the fallback for a chip rendered without one. */
 .task-tag-chip {
+  --tag-hue: 220;
   font-size: 11px;
   font-weight: 600;
   padding: 3px 8px;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--text-soft);
-  background: var(--surface-2);
+  border: 1px solid hsl(var(--tag-hue) 55% 60% / 0.45);
+  color: hsl(var(--tag-hue) 70% 74%);
+  background: hsl(var(--tag-hue) 60% 55% / 0.15);
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.task-tag-chip::before { content: "#"; color: var(--text-faint); margin-right: 1px; }
+:root[data-theme="light"] .task-tag-chip {
+  border-color: hsl(var(--tag-hue) 50% 45% / 0.4);
+  color: hsl(var(--tag-hue) 62% 34%);
+  background: hsl(var(--tag-hue) 65% 50% / 0.12);
+}
+.task-tag-chip::before { content: "#"; opacity: 0.55; margin-right: 1px; }
+.board-group-dot {
+  --tag-hue: 220;
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 7px;
+  flex-shrink: 0;
+  background: hsl(var(--tag-hue) 65% 60%);
+}
+:root[data-theme="light"] .board-group-dot { background: hsl(var(--tag-hue) 60% 46%); }
 .task-subtask-progress { font-size: 11px; color: var(--text-faint); font-family: var(--font-mono); }
 
 .task-time-col {
@@ -1768,10 +1795,27 @@ html, body {
 
 /* ---------- Home dashboard (landing view) ---------- */
 .home-view {
-  margin: 12px 12px 0;
+  margin: 10px 12px 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+}
+.home-greeting { margin: 0; }
+.home-greeting-line {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.home-greeting-sub {
+  margin: 4px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
 }
 .home-stats {
   display: grid;
@@ -1783,15 +1827,38 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
-  padding: 12px 8px;
+  padding: 10px 8px;
   text-align: center;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  cursor: pointer;
+  font: inherit;
+}
+.home-stat:active { background: var(--surface-2); }
+/* Zero overdue is good news, so it recedes instead of sitting at full weight
+   next to the numbers that still need attention. */
+.home-stat.muted { opacity: 0.62; }
+.home-stat.muted .home-stat-value { color: var(--text-faint); }
+.home-stat.good .home-stat-value { color: var(--green); }
+.home-section.is-flashed {
+  animation: home-section-flash 1.1s ease;
+}
+@keyframes home-section-flash {
+  0%, 100% { background: transparent; }
+  25% { background: color-mix(in srgb, var(--accent) 13%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-section.is-flashed { animation: none; }
 }
 .home-stat-value { font-family: var(--font-mono); font-size: 20px; font-weight: 700; color: var(--text); }
 .home-stat-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.home-stat.danger {
+  border-color: color-mix(in srgb, var(--red) 45%, var(--border));
+  background: color-mix(in srgb, var(--red) 8%, var(--surface));
+}
 .home-stat.danger .home-stat-value { color: var(--red); }
+.home-stat.danger .home-stat-label { color: var(--red); opacity: 0.85; }
 .home-section-title {
   display: flex;
   align-items: center;
