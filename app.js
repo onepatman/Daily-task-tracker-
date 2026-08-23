@@ -191,6 +191,8 @@
     homeOverdueSection: document.getElementById("homeOverdueSection"),
     homeOverdueList: document.getElementById("homeOverdueList"),
     moveAllOverdueBtn: document.getElementById("moveAllOverdueBtn"),
+    homeGreeting: document.getElementById("homeGreeting"),
+    homeGreetingSub: document.getElementById("homeGreetingSub"),
     homeTodaySection: document.getElementById("homeTodaySection"),
     homeTodayList: document.getElementById("homeTodayList"),
     homeUpcomingSection: document.getElementById("homeUpcomingSection"),
@@ -423,6 +425,21 @@
     }
     return false;
   }
+  // Client/project tags get a stable colour derived from their own name, so a
+  // project keeps the same colour everywhere without anyone configuring it and
+  // without storing anything. Hues come from a fixed palette rather than the
+  // full wheel: every entry stays legible in both themes, and reds are left out
+  // because red already means overdue/urgent here.
+  const TAG_HUES = [210, 265, 150, 35, 190, 320, 95, 250];
+  function tagHue(tag) {
+    let h = 0;
+    for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) >>> 0;
+    return TAG_HUES[h % TAG_HUES.length];
+  }
+  function applyTagColor(el, tag) {
+    el.style.setProperty("--tag-hue", String(tagHue(tag)));
+  }
+
   function repeatLabel(task) {
     if (task.repeat === "custom") {
       const days = (task.repeatDays || []).slice().sort();
@@ -1117,10 +1134,10 @@
     el.punchlist.classList.toggle("manual-sort", isManualSort());
 
     if (allDayTasks.length === 0) {
-      el.emptyState.innerHTML = 'No items logged for this sheet.<br>Tap <strong>+ LOG ITEM</strong> to add one.';
+      el.emptyState.innerHTML = 'This day is clear.<br>Tap <strong>+ LOG ITEM</strong> to plan something.';
       el.emptyState.style.display = "block";
     } else if (visibleTasks.length === 0) {
-      el.emptyState.innerHTML = "No tasks match your search or filters.";
+      el.emptyState.innerHTML = "Nothing matches those filters.<br>Try clearing the search or chips above.";
       el.emptyState.style.display = "block";
     } else {
       el.emptyState.style.display = "none";
@@ -1151,6 +1168,7 @@
     const row = document.createElement("div");
     row.className = "task-row cat-" + (CATEGORIES[task.category] ? task.category : "other") + (done ? " done" : "")
       + (isOverdue(dateKey, task, done) ? " overdue" : "")
+      + (task.priority === "high" && !done ? " is-high" : "")
       + (selectMode ? " select-mode" : "") + (selected ? " selected" : "");
     row.draggable = isManualSort() && !selectMode;
     row.addEventListener("click", () => {
@@ -1224,6 +1242,7 @@
     if (task.tag) {
       const tagChip = document.createElement("span");
       tagChip.className = "task-tag-chip";
+      applyTagColor(tagChip, task.tag);
       renderHighlightedText(tagChip, task.tag, searchQuery);
       meta.appendChild(tagChip);
     }
@@ -1580,7 +1599,7 @@
       if (dayTasks.length === 0) {
         const empty = document.createElement("div");
         empty.className = "week-day-empty";
-        empty.textContent = allDay.length ? "No tasks match filters" : "No tasks";
+        empty.textContent = allDay.length ? "Hidden by filters" : "Clear";
         list.appendChild(empty);
       } else {
         dayTasks.slice(0, 6).forEach((t) => {
@@ -1676,7 +1695,7 @@
     if (list.length === 0) {
       const empty = document.createElement("p");
       empty.className = "day-detail-empty";
-      empty.textContent = "No tasks logged for this day.";
+      empty.textContent = "This day is clear — nothing scheduled.";
       el.dayDetailBody.appendChild(empty);
       return;
     }
@@ -1724,6 +1743,7 @@
     if (task.tag) {
       const tagChip = document.createElement("span");
       tagChip.className = "task-tag-chip";
+      applyTagColor(tagChip, task.tag);
       tagChip.textContent = task.tag;
       meta.appendChild(tagChip);
     }
@@ -1867,7 +1887,7 @@
     if (dayTasks.length === 0) {
       const empty = document.createElement("div");
       empty.className = "timeline-unscheduled";
-      empty.textContent = "No tasks logged for this day.";
+      empty.textContent = "This day is clear — nothing scheduled.";
       el.timelineView.appendChild(empty);
     }
   }
@@ -1953,7 +1973,7 @@
     sectionEl.hidden = false;
     const shown = capAt ? entries.slice(0, capAt) : entries;
     shown.forEach(({ task, dateKey, missedDateKeys }) =>
-      listEl.appendChild(buildBoardTaskRow(task, dateKey, missedDateKeys ? missedDateKeys.length : 0)));
+      listEl.appendChild(buildBoardTaskRow(task, dateKey, missedDateKeys ? missedDateKeys.length : 0, true)));
     if (capAt && entries.length > capAt) {
       const more = document.createElement("p");
       more.className = "home-more";
@@ -2011,24 +2031,61 @@
     const upcoming = getHomeUpcomingEntries();
 
     renderHomeSection(el.homeOverdueSection, el.homeOverdueList, overdue, null, HOME_OVERDUE_SHOWN);
-    renderHomeSection(el.homeTodaySection, el.homeTodayList, todayEntries, "No tasks logged for today.", null);
-    renderHomeSection(el.homeUpcomingSection, el.homeUpcomingList, upcoming, "Nothing scheduled in the next 7 days.", HOME_UPCOMING_SHOWN);
+    renderHomeSection(el.homeTodaySection, el.homeTodayList, todayEntries, "Nothing planned for today yet. Tap + to add your first task.", null);
+    renderHomeSection(el.homeUpcomingSection, el.homeUpcomingList, upcoming, "The week ahead is clear. A good time to plan.", HOME_UPCOMING_SHOWN);
+
+    const todayDone = todayList.filter((t) => isDoneOn(t, todayKey)).length;
+    const todayLeft = todayList.length - todayDone;
+    renderHomeGreeting({ overdue: overdue.length, todayLeft, todayTotal: todayList.length, upcoming: upcoming.length });
 
     el.homeStats.innerHTML = "";
-    const todayDone = todayList.filter((t) => isDoneOn(t, todayKey)).length;
     const stats = [
-      { value: String(overdue.length), label: "overdue", tone: overdue.length > 0 ? "danger" : "" },
-      { value: `${todayDone}/${todayList.length}`, label: "today" },
-      { value: String(upcoming.length), label: "upcoming (7d)" },
+      // Overdue is the one number that demands action, so it goes loud when it
+      // has a value and stays quiet at zero. The other two are always neutral.
+      { value: String(overdue.length), label: "overdue", target: el.homeOverdueSection,
+        tone: overdue.length > 0 ? "danger" : "muted" },
+      { value: `${todayDone}/${todayList.length}`, label: "today", target: el.homeTodaySection,
+        tone: todayList.length > 0 && todayDone === todayList.length ? "good" : "" },
+      { value: String(upcoming.length), label: "upcoming (7d)", target: el.homeUpcomingSection, tone: "" },
     ];
     stats.forEach((s) => {
-      const box = document.createElement("div");
+      const box = document.createElement("button");
+      box.type = "button";
       box.className = "home-stat" + (s.tone ? " " + s.tone : "");
       const v = document.createElement("span"); v.className = "home-stat-value"; v.textContent = s.value;
       const l = document.createElement("span"); l.className = "home-stat-label"; l.textContent = s.label;
       box.append(v, l);
+      box.addEventListener("click", () => {
+        if (s.target.hidden) return;
+        s.target.scrollIntoView({ behavior: "smooth", block: "start" });
+        s.target.classList.remove("is-flashed");
+        void s.target.offsetWidth;
+        s.target.classList.add("is-flashed");
+      });
       el.homeStats.appendChild(box);
     });
+  }
+
+  function renderHomeGreeting({ overdue, todayLeft, todayTotal, upcoming }) {
+    const h = new Date().getHours();
+    const partOfDay = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+    const d = parseDateKey(toDateKey(today));
+    el.homeGreeting.textContent = `${partOfDay} — ${DAY_NAMES[d.getDay()]}, ${MONTHS[d.getMonth()].slice(0, 3)} ${d.getDate()}`;
+
+    // One plain sentence for the whole day, leading with whatever matters most.
+    let sub;
+    if (overdue > 0) {
+      sub = `${overdue} overdue item${overdue > 1 ? "s" : ""} need${overdue > 1 ? "" : "s"} attention.`;
+    } else if (todayTotal === 0) {
+      sub = upcoming > 0
+        ? `Nothing due today. ${upcoming} coming up this week.`
+        : "Nothing scheduled. Enjoy the clear day.";
+    } else if (todayLeft === 0) {
+      sub = "Everything for today is done. Nice work.";
+    } else {
+      sub = `${todayLeft} of ${todayTotal} still to go today.`;
+    }
+    el.homeGreetingSub.textContent = sub;
   }
 
   // ---------- Board view (tasks grouped by client/project tag, across all dates) ----------
@@ -2047,8 +2104,8 @@
       const empty = document.createElement("p");
       empty.className = "board-empty";
       empty.textContent = tasks.length === 0
-        ? "No tasks logged yet."
-        : "No tasks match your search or filters.";
+        ? "No tasks yet. Add one and it will appear here, grouped by client or project."
+        : "Nothing matches those filters. Try clearing the search or chips above.";
       el.boardView.appendChild(empty);
       return;
     }
@@ -2065,10 +2122,10 @@
     tagKeys.forEach((tagKey) => {
       const groupTasks = groups.get(tagKey).sort((a, b) =>
         a.startDate.localeCompare(b.startDate) || (a.time || "99:99").localeCompare(b.time || "99:99"));
-      el.boardView.appendChild(buildBoardGroup(tagKey || "No client / project", groupTasks));
+      el.boardView.appendChild(buildBoardGroup(tagKey || "No client / project", groupTasks, tagKey));
     });
   }
-  function buildBoardGroup(title, groupTasks) {
+  function buildBoardGroup(title, groupTasks, tagKey) {
     const section = document.createElement("div");
     section.className = "board-group";
 
@@ -2076,7 +2133,15 @@
     head.className = "board-group-head";
     const ttl = document.createElement("span");
     ttl.className = "board-group-title";
-    ttl.textContent = title;
+    if (tagKey) {
+      // Same colour the tag chips use, so a project is recognisable whether you
+      // are looking at a row or at its Board heading.
+      const dot = document.createElement("span");
+      dot.className = "board-group-dot";
+      applyTagColor(dot, tagKey);
+      ttl.appendChild(dot);
+    }
+    ttl.appendChild(document.createTextNode(title));
     head.appendChild(ttl);
     const doneCount = groupTasks.filter((t) => isDoneOn(t, t.startDate)).length;
     const count = document.createElement("span");
@@ -2128,12 +2193,15 @@
 
     return section;
   }
-  function buildBoardTaskRow(task, dateKey, missedCount) {
+  // showTag is on for Home, where rows come from every project at once, and off
+  // for Board, where the group heading already names the project.
+  function buildBoardTaskRow(task, dateKey, missedCount, showTag) {
     dateKey = dateKey || task.startDate;
     const done = isDoneOn(task, dateKey);
     const row = document.createElement("div");
     row.className = "board-task-row cat-" + (CATEGORIES[task.category] ? task.category : "other") + (done ? " done" : "")
-      + (isOverdue(dateKey, task, done) ? " overdue" : "");
+      + (isOverdue(dateKey, task, done) ? " overdue" : "")
+      + (task.priority === "high" && !done ? " is-high" : "");
 
     const check = document.createElement("button");
     check.type = "button";
@@ -2172,6 +2240,13 @@
     catChip.style.background = catInfo.color;
     catChip.textContent = catInfo.label;
     meta.appendChild(catChip);
+    if (showTag && task.tag) {
+      const tagChip = document.createElement("span");
+      tagChip.className = "task-tag-chip";
+      applyTagColor(tagChip, task.tag);
+      tagChip.textContent = task.tag;
+      meta.appendChild(tagChip);
+    }
     meta.appendChild(buildPriorityChip(task, dateKey, done));
     if (missedCount > 1) {
       const missed = document.createElement("span");
