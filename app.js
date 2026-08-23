@@ -212,6 +212,9 @@
     modalOverlay: document.getElementById("modalOverlay"),
     modalTitle: document.getElementById("modalTitle"),
     taskForm: document.getElementById("taskForm"),
+    reportBox: document.querySelector("#reportOverlay .report-box"),
+    syncBox: document.querySelector("#syncOverlay .report-box"),
+    dayDetailBox: document.querySelector("#dayDetailOverlay .day-detail-box"),
     templateRow: document.getElementById("templateRow"),
     templateSelect: document.getElementById("templateSelect"),
     saveTemplateBtn: document.getElementById("saveTemplateBtn"),
@@ -1780,13 +1783,23 @@
   }
 
   // ---------- Day detail popup (from Week view) ----------
+  // Overlay panels scroll inside themselves, and a hidden element keeps its
+  // scrollTop. Without an explicit reset a panel reopens exactly where it was
+  // last left, which clips its own top rows out of view. Whether that was
+  // visible depended on window height and on how far focus() happened to drag
+  // the container back, so it looked intermittent rather than broken.
+  function showOverlay(overlayEl, panelEl) {
+    overlayEl.hidden = false;
+    if (panelEl) panelEl.scrollTop = 0;
+  }
+
   function openDayDetail(dateKey) {
     dayDetailMode = "day";
     dayDetailDateKey = dateKey;
     dayDetailTask = null;
     renderDayDetail();
     el.dayDetailViewFull.hidden = false;
-    el.dayDetailOverlay.hidden = false;
+    showOverlay(el.dayDetailOverlay, el.dayDetailBox);
     pushOverlayState();
   }
   function openTaskDetail(task, dateKey) {
@@ -1795,7 +1808,7 @@
     dayDetailTask = task;
     renderDayDetail();
     el.dayDetailViewFull.hidden = true;
-    el.dayDetailOverlay.hidden = false;
+    showOverlay(el.dayDetailOverlay, el.dayDetailBox);
     pushOverlayState();
   }
   function closeDayDetail() {
@@ -2617,7 +2630,7 @@
   }
   function openReport() {
     renderReport();
-    el.reportOverlay.hidden = false;
+    showOverlay(el.reportOverlay, el.reportBox);
     pushOverlayState();
   }
   function closeReport() {
@@ -2887,7 +2900,7 @@
   }
 
   function openSyncOverlay() {
-    el.syncOverlay.hidden = false;
+    showOverlay(el.syncOverlay, el.syncBox);
     pushOverlayState();
     renderSyncBody();
   }
@@ -3742,9 +3755,9 @@
     el.deleteTemplateBtn.hidden = true;
     closeDatePicker();
     closeTimePicker();
-    el.modalOverlay.hidden = false;
+    showOverlay(el.modalOverlay, el.taskForm);
     pushOverlayState();
-    setTimeout(() => el.taskTitle.focus(), 50);
+    setTimeout(() => el.taskTitle.focus({ preventScroll: true }), 50);
   }
   function openEditModal(task, dateKey) {
     editingTask = task;
@@ -3773,9 +3786,9 @@
     el.templateRow.hidden = true;
     closeDatePicker();
     closeTimePicker();
-    el.modalOverlay.hidden = false;
+    showOverlay(el.modalOverlay, el.taskForm);
     pushOverlayState();
-    setTimeout(() => el.taskTitle.focus(), 50);
+    setTimeout(() => el.taskTitle.focus({ preventScroll: true }), 50);
   }
   function closeModal() {
     el.modalOverlay.hidden = true;
