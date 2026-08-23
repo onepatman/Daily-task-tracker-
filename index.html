@@ -314,8 +314,16 @@
     </div>
 
     <label>Task
-      <input type="text" id="taskTitle" required maxlength="120" placeholder="e.g. Submit HVAC load calc" />
+      <input type="text" id="taskTitle" required maxlength="120" placeholder="e.g. Load calc tomorrow 9am !high #Acme" />
     </label>
+    <div class="quick-parse" id="quickParse" hidden>
+      <span class="quick-parse-label">Detected</span>
+      <div class="quick-parse-chips" id="quickParseChips"></div>
+    </div>
+    <p class="quick-parse-hint" id="quickParseHint">
+      Type naturally — <code>tomorrow</code>, <code>9am</code>, <code>2-4pm</code>, <code>every monday</code>,
+      <code>!high</code>, <code>@work</code>, <code>#Project</code>
+    </p>
 
     <div class="field-row">
       <label>Date
