@@ -1267,6 +1267,59 @@ html, body {
 }
 .picker-trigger-icon { flex-shrink: 0; margin-left: 8px; opacity: 0.75; }
 
+.quick-parse {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: -6px 0 8px;
+}
+.quick-parse-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.quick-parse-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.quick-parse-chip {
+  --tag-hue: 220;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+.quick-parse-chip.danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
+.quick-parse-chip.tag {
+  color: hsl(var(--tag-hue) 70% 74%);
+  border-color: hsl(var(--tag-hue) 55% 60% / 0.45);
+  background: hsl(var(--tag-hue) 60% 55% / 0.15);
+}
+:root[data-theme="light"] .quick-parse-chip.tag {
+  color: hsl(var(--tag-hue) 62% 34%);
+  border-color: hsl(var(--tag-hue) 50% 45% / 0.4);
+  background: hsl(var(--tag-hue) 65% 50% / 0.12);
+}
+.quick-parse-hint {
+  margin: -4px 0 14px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-faint);
+}
+.quick-parse-hint code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--accent-2);
+}
+
 .repeat-days-field { margin: -6px 0 14px; }
 .repeat-days-label {
   display: block;

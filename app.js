@@ -217,6 +217,9 @@
     saveTemplateBtn: document.getElementById("saveTemplateBtn"),
     deleteTemplateBtn: document.getElementById("deleteTemplateBtn"),
     taskTitle: document.getElementById("taskTitle"),
+    quickParse: document.getElementById("quickParse"),
+    quickParseChips: document.getElementById("quickParseChips"),
+    quickParseHint: document.getElementById("quickParseHint"),
     taskDate: document.getElementById("taskDate"),
     taskDateBtn: document.getElementById("taskDateBtn"),
     repeatDaysField: document.getElementById("repeatDaysField"),
@@ -438,6 +441,131 @@
   }
   function applyTagColor(el, tag) {
     el.style.setProperty("--tag-hue", String(tagHue(tag)));
+  }
+
+  // ---------- Natural-language quick add ----------
+  // Turns one typed line into task fields. Tokens are deliberately explicit
+  // (@category, #tag, !priority) rather than guessed from bare words, because
+  // a task title like "high voltage panel" or "Monday briefing" would otherwise
+  // silently rewrite the priority or the date. Only dates, times and repeats
+  // read as plain English, since those are unambiguous enough in context.
+  const QA_CATEGORY_WORDS = Object.keys(CATEGORIES);
+  const QA_PRIORITY_WORDS = { high: "high", hi: "high", med: "medium", medium: "medium", low: "low" };
+
+  function qaNextWeekday(targetDow, skipAWeek) {
+    const d = new Date(today);
+    let delta = (targetDow - d.getDay() + 7) % 7;
+    if (skipAWeek) delta += 7;
+    d.setDate(d.getDate() + delta);
+    return toDateKey(d);
+  }
+  function qaShiftDays(n) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + n);
+    return toDateKey(d);
+  }
+  function qaTo24h(hour, minute, meridiem) {
+    let h = hour % 12;
+    if (meridiem === "pm") h += 12;
+    if (!meridiem) h = hour % 24;         // bare 14:00 stays as typed
+    return `${String(h).padStart(2, "0")}:${String(minute || 0).padStart(2, "0")}`;
+  }
+
+  function parseQuickAdd(raw) {
+    const found = {};
+    let text = raw;
+    const cut = (re) => { text = text.replace(re, " "); };
+
+    // #tag runs to the end of the line, so project names may contain spaces.
+    const tagM = text.match(/#\s*([^#]+)$/);
+    if (tagM && tagM[1].trim()) {
+      found.tag = tagM[1].trim();
+      cut(/#\s*[^#]+$/);
+    }
+
+    const catM = text.match(new RegExp(`@(${QA_CATEGORY_WORDS.join("|")})\\b`, "i"));
+    if (catM) { found.category = catM[1].toLowerCase(); cut(new RegExp(`@${catM[1]}\\b`, "i")); }
+
+    const priWordM = text.match(new RegExp(`!(${Object.keys(QA_PRIORITY_WORDS).join("|")})\\b`, "i"));
+    if (priWordM) {
+      found.priority = QA_PRIORITY_WORDS[priWordM[1].toLowerCase()];
+      cut(new RegExp(`!${priWordM[1]}\\b`, "i"));
+    } else {
+      const bangM = text.match(/(?:^|\s)(!{1,3})(?=\s|$)/);
+      if (bangM) {
+        found.priority = { "!": "low", "!!": "medium", "!!!": "high" }[bangM[1]];
+        cut(/(?:^|\s)!{1,3}(?=\s|$)/);
+      }
+    }
+
+    // Repeats before dates: "every monday" must not be eaten by the weekday rule.
+    const everyDow = text.match(new RegExp(`\\bevery\\s+(${FULL_DAY_NAMES.map((d) => d.toLowerCase()).join("|")})s?\\b`, "i"));
+    if (everyDow) {
+      found.repeat = "custom";
+      found.repeatDays = [FULL_DAY_NAMES.indexOf(everyDow[1].toUpperCase())];
+      cut(new RegExp(`\\bevery\\s+${everyDow[1]}s?\\b`, "i"));
+    } else if (/\b(every\s+weekday|weekdays)\b/i.test(text)) {
+      found.repeat = "weekdays"; cut(/\b(every\s+weekday|weekdays)\b/i);
+    } else if (/\b(every\s*day|daily)\b/i.test(text)) {
+      found.repeat = "daily"; cut(/\b(every\s*day|daily)\b/i);
+    } else if (/\b(every\s+week|weekly)\b/i.test(text)) {
+      found.repeat = "weekly"; cut(/\b(every\s+week|weekly)\b/i);
+    } else if (/\b(every\s+month|monthly)\b/i.test(text)) {
+      found.repeat = "monthly"; cut(/\b(every\s+month|monthly)\b/i);
+    }
+
+    // Time, including ranges, before dates so "9-11am" isn't read as a day number.
+    const RANGE = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i;
+    const rangeM = text.match(RANGE);
+    if (rangeM) {
+      const endMer = rangeM[6].toLowerCase();
+      found.time = qaTo24h(+rangeM[1], +rangeM[2] || 0, (rangeM[3] || endMer).toLowerCase());
+      found.endTime = qaTo24h(+rangeM[4], +rangeM[5] || 0, endMer);
+      cut(RANGE);
+    } else {
+      const t12 = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+      const t24 = text.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+      if (t12) { found.time = qaTo24h(+t12[1], +t12[2] || 0, t12[3].toLowerCase()); cut(/\b\d{1,2}(?::\d{2})?\s*(am|pm)\b/i); }
+      else if (t24) { found.time = qaTo24h(+t24[1], +t24[2], null); cut(/\b([01]?\d|2[0-3]):[0-5]\d\b/); }
+    }
+
+    if (/\btoday\b/i.test(text)) { found.startDate = qaShiftDays(0); cut(/\btoday\b/i); }
+    else if (/\b(tomorrow|tmr|tmrw)\b/i.test(text)) { found.startDate = qaShiftDays(1); cut(/\b(tomorrow|tmr|tmrw)\b/i); }
+    else {
+      const inDays = text.match(/\bin\s+(\d{1,3})\s+days?\b/i);
+      const nextDow = text.match(new RegExp(`\\b(next\\s+)?(${FULL_DAY_NAMES.map((d) => d.toLowerCase()).join("|")}|${DAY_NAMES.map((d) => d.toLowerCase()).join("|")})\\b`, "i"));
+      const monthName = MONTHS.map((m) => m.toLowerCase()).join("|");
+      const mdM = text.match(new RegExp(`\\b(${monthName}|${MONTHS.map((m) => m.slice(0, 3).toLowerCase()).join("|")})\\.?\\s+(\\d{1,2})\\b`, "i"));
+      const dmM = text.match(new RegExp(`\\b(\\d{1,2})\\s+(${monthName}|${MONTHS.map((m) => m.slice(0, 3).toLowerCase()).join("|")})\\b`, "i"));
+      const slashM = text.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+
+      if (inDays) { found.startDate = qaShiftDays(+inDays[1]); cut(/\bin\s+\d{1,3}\s+days?\b/i); }
+      else if (mdM || dmM) {
+        const nameRaw = (mdM ? mdM[1] : dmM[2]).toUpperCase();
+        const day = +(mdM ? mdM[2] : dmM[1]);
+        const idx = MONTHS.findIndex((m) => m.startsWith(nameRaw.slice(0, 3)));
+        // A month/day already past this year means they mean next year.
+        const y = today.getFullYear();
+        let d = new Date(y, idx, day);
+        if (toDateKey(d) < toDateKey(today)) d = new Date(y + 1, idx, day);
+        found.startDate = toDateKey(d);
+        cut(mdM ? new RegExp(`\\b${mdM[1]}\\.?\\s+${mdM[2]}\\b`, "i") : new RegExp(`\\b${dmM[1]}\\s+${dmM[2]}\\b`, "i"));
+      } else if (nextDow) {
+        const word = nextDow[2].toUpperCase();
+        const dow = FULL_DAY_NAMES.findIndex((d) => d.startsWith(word.slice(0, 3)));
+        found.startDate = qaNextWeekday(dow, !!nextDow[1]);
+        cut(new RegExp(`\\b(next\\s+)?${nextDow[2]}\\b`, "i"));
+      } else if (slashM) {
+        const y = today.getFullYear();
+        let d = new Date(y, +slashM[1] - 1, +slashM[2]);
+        if (toDateKey(d) < toDateKey(today)) d = new Date(y + 1, +slashM[1] - 1, +slashM[2]);
+        found.startDate = toDateKey(d);
+        cut(/\b\d{1,2}\/\d{1,2}\b/);
+      }
+    }
+
+    found.title = text.replace(/\s{2,}/g, " ").trim();
+    return found;
   }
 
   function repeatLabel(task) {
@@ -3594,6 +3722,8 @@
     modalPhoto = "";
     renderPhotoField();
     el.modalTitle.textContent = "Log Item";
+    clearQuickParse();
+    el.quickParseHint.hidden = false;
     el.taskDate.value = selectedDate;
     el.taskDateDisplay.textContent = formatDateDisplay(selectedDate);
     el.taskTime.value = "";
@@ -3638,6 +3768,8 @@
     modalPhoto = task.photo || "";
     renderPhotoField();
     el.modalTitle.textContent = "Edit Item";
+    clearQuickParse();
+    el.quickParseHint.hidden = true;
     el.templateRow.hidden = true;
     closeDatePicker();
     closeTimePicker();
@@ -3650,6 +3782,70 @@
     closeDatePicker();
     closeTimePicker();
   }
+  // Live quick-add: as the line is typed, the recognised parts are pushed into
+  // the real form fields so they are visible and overridable, and echoed as
+  // chips. Only in create mode -- rewriting an existing task's date because its
+  // title happens to contain "Monday" would be a nasty surprise.
+  let quickParsed = null;
+
+  function clearQuickParse() {
+    quickParsed = null;
+    el.quickParse.hidden = true;
+    el.quickParseChips.innerHTML = "";
+  }
+  function runQuickParse() {
+    if (editingTask) return;
+    const raw = el.taskTitle.value;
+    const p = parseQuickAdd(raw);
+    const hits = [];
+
+    if (p.startDate) {
+      el.taskDate.value = p.startDate;
+      el.taskDateDisplay.textContent = formatDateDisplay(p.startDate);
+      hits.push({ label: formatDateDisplay(p.startDate).replace(/,\s*\d{4}$/, ""), tone: "" });
+    }
+    if (p.time) {
+      el.taskTime.value = p.time;
+      el.taskTimeDisplay.textContent = formatTimeDisplay(p.time);
+      hits.push({ label: formatTimeDisplay(p.time), tone: "" });
+    }
+    if (p.endTime) {
+      el.taskEndTime.value = p.endTime;
+      el.taskEndTimeDisplay.textContent = formatTimeDisplay(p.endTime);
+      hits.push({ label: "→ " + formatTimeDisplay(p.endTime), tone: "" });
+    }
+    if (p.priority) {
+      el.taskPriority.value = p.priority;
+      hits.push({ label: p.priority, tone: p.priority === "high" ? "danger" : "" });
+    }
+    if (p.category) {
+      el.taskCategory.value = p.category;
+      hits.push({ label: (CATEGORIES[p.category] || CATEGORIES.other).label, tone: "" });
+    }
+    if (p.tag) {
+      el.taskTag.value = p.tag;
+      hits.push({ label: "#" + p.tag, tone: "tag", tag: p.tag });
+    }
+    if (p.repeat) {
+      el.taskRepeat.value = p.repeat;
+      if (p.repeatDays) { modalRepeatDays = p.repeatDays.slice(); renderRepeatDays(); }
+      syncRepeatFields();
+      hits.push({ label: repeatLabel({ repeat: p.repeat, repeatDays: p.repeatDays }), tone: "" });
+    }
+
+    quickParsed = hits.length ? p : null;
+    el.quickParse.hidden = hits.length === 0;
+    el.quickParseChips.innerHTML = "";
+    hits.forEach((h) => {
+      const chip = document.createElement("span");
+      chip.className = "quick-parse-chip" + (h.tone ? " " + h.tone : "");
+      if (h.tag) applyTagColor(chip, h.tag);
+      chip.textContent = h.label;
+      el.quickParseChips.appendChild(chip);
+    });
+  }
+  el.taskTitle.addEventListener("input", runQuickParse);
+
   el.addTaskBtn.addEventListener("click", openCreateModal);
   el.cancelTask.addEventListener("click", closeModal);
   el.modalOverlay.addEventListener("click", (e) => {
@@ -3657,7 +3853,10 @@
   });
   el.taskForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    const title = el.taskTitle.value.trim();
+    // Strip the recognised tokens out of the saved title, but only if something
+    // is actually left -- "tomorrow" alone should stay as the title rather than
+    // saving an empty one.
+    const title = (quickParsed && quickParsed.title) ? quickParsed.title : el.taskTitle.value.trim();
     if (!title) return;
     const startDate = el.taskDate.value || selectedDate;
     const category = el.taskCategory.value;
