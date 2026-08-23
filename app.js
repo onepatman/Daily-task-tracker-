@@ -17,6 +17,7 @@
   // sets, sizes, colors). A single inline-SVG set styled with currentColor
   // looks identical everywhere and always matches surrounding text color.
   const ICONS = {
+    chevronDown: '<path d="M6 9l6 6 6-6"/>',
     moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
     download: '<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/>',
@@ -169,6 +170,8 @@
     calendarToggle: document.getElementById("calendarToggle"),
     insightsPanel: document.getElementById("insightsPanel"),
     insightsToggle: document.getElementById("insightsToggle"),
+    insightsToggleLabel: document.getElementById("insightsToggleLabel"),
+    calendarToggleLabel: document.getElementById("calendarToggleLabel"),
     insightRingValue: document.getElementById("insightRingValue"),
     insightRingPct: document.getElementById("insightRingPct"),
     insightStreak: document.getElementById("insightStreak"),
@@ -3640,15 +3643,21 @@
     if (viewMonth > 11) { viewMonth = 0; viewYear++; }
     renderCalendar();
   });
+  // Both toggles share one chevron icon that rotates, rather than swapping
+  // between typed arrow characters -- the two used to disagree (U+25BC vs the
+  // "SMALL" U+25BE), so the insights arrow rendered visibly smaller than the
+  // calendar one and changed size when toggled.
   el.calendarToggle.addEventListener("click", () => {
     calendarOpen = !calendarOpen;
     el.calendarSection.style.display = calendarOpen ? "" : "none";
-    el.calendarToggle.textContent = calendarOpen ? "Hide calendar ▲" : "Show calendar ▼";
+    el.calendarToggleLabel.textContent = calendarOpen ? "Hide calendar" : "Show calendar";
+    el.calendarToggle.classList.toggle("is-open", calendarOpen);
   });
   el.insightsToggle.addEventListener("click", () => {
     insightsOpen = !insightsOpen;
     el.insightsPanel.hidden = !insightsOpen;
-    el.insightsToggle.textContent = insightsOpen ? "Hide insights ▲" : "Show insights ▾";
+    el.insightsToggleLabel.textContent = insightsOpen ? "Hide insights" : "Show insights";
+    el.insightsToggle.classList.toggle("is-open", insightsOpen);
   });
 
   // ---------- Keyboard shortcuts ----------

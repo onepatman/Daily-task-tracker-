@@ -120,7 +120,10 @@
         </div>
         <div class="calendar-grid" id="calendarGrid"></div>
       </section>
-      <button class="calendar-toggle" id="calendarToggle">Hide calendar ▲</button>
+      <button class="section-toggle is-open" id="calendarToggle">
+        <span id="calendarToggleLabel">Hide calendar</span>
+        <span class="icon section-toggle-chevron" data-icon="chevronDown"></span>
+      </button>
 
       <section class="insights-panel" id="insightsPanel" hidden>
         <div class="insight-today">
@@ -154,7 +157,10 @@
           <p class="insight-sub" id="insightWeekSummary">No tasks logged this week yet.</p>
         </div>
       </section>
-      <button class="insights-toggle" id="insightsToggle">Show insights ▾</button>
+      <button class="section-toggle" id="insightsToggle">
+        <span id="insightsToggleLabel">Show insights</span>
+        <span class="icon section-toggle-chevron" data-icon="chevronDown"></span>
+      </button>
     </aside>
 
     <div class="app-main">
