@@ -512,17 +512,31 @@ html, body {
   50% { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
 }
 
-.calendar-toggle, .insights-toggle {
-  display: block;
-  margin: 6px auto 0;
-  background: none;
-  border: none;
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px auto 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
   color: var(--accent-2);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.08em;
-  padding: 6px 12px;
+  padding: 6px 14px;
   cursor: pointer;
+}
+.section-toggle:active { background: var(--surface-2); }
+.section-toggle-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+.section-toggle.is-open .section-toggle-chevron { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .section-toggle-chevron { transition: none; }
 }
 .calendar-section-hidden { display: none; }
 
