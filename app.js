@@ -173,6 +173,10 @@
     insightRingPct: document.getElementById("insightRingPct"),
     insightStreak: document.getElementById("insightStreak"),
     insightSparkline: document.getElementById("insightSparkline"),
+    insightHeadline: document.getElementById("insightHeadline"),
+    insightSub: document.getElementById("insightSub"),
+    insightStreakHint: document.getElementById("insightStreakHint"),
+    insightWeekSummary: document.getElementById("insightWeekSummary"),
     searchInput: document.getElementById("searchInput"),
     categoryChips: document.getElementById("categoryChips"),
     priorityChips: document.getElementById("priorityChips"),
@@ -2187,55 +2191,126 @@
   }
 
   // ---------- Insights ----------
+  // A streak counts consecutive days on which everything planned got finished.
+  // Two rules matter for it to feel fair:
+  //  - A day with nothing scheduled is neutral, not a failure. Skipping it
+  //    means a normal weekend doesn't wipe out a week of finished work.
+  //  - A long gap should still end the streak, so empty days only carry it
+  //    across up to a week.
+  const STREAK_MAX_EMPTY_GAP = 7;
+
   function computeStreak() {
     const todayKey = toDateKey(today);
     const todayList = tasksForDate(todayKey);
     const todayComplete = todayList.length > 0 && todayList.every((t) => isDoneOn(t, todayKey));
     const cursor = new Date(today);
+    // An unfinished today doesn't break a streak built up to yesterday -- the
+    // day isn't over yet -- so start counting from yesterday in that case.
     if (!todayComplete) cursor.setDate(cursor.getDate() - 1);
     let streak = 0;
+    let emptyRun = 0;
     for (let i = 0; i < 365; i++) {
       const key = toDateKey(cursor);
       const dayList = tasksForDate(key);
-      if (dayList.length === 0) break;
-      if (!dayList.every((t) => isDoneOn(t, key))) break;
-      streak++;
+      if (dayList.length === 0) {
+        if (++emptyRun > STREAK_MAX_EMPTY_GAP) break;
+      } else {
+        if (!dayList.every((t) => isDoneOn(t, key))) break;
+        emptyRun = 0;
+        streak++;
+      }
       cursor.setDate(cursor.getDate() - 1);
     }
-    if (todayComplete) streak++;
     return streak;
   }
 
-  function renderSparkline() {
-    el.insightSparkline.innerHTML = "";
+  // Returns the last 7 days oldest-first so the chart reads left-to-right.
+  function getWeekCompletion() {
+    const days = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
       const key = toDateKey(d);
       const list = tasksForDate(key);
       const done = list.filter((t) => isDoneOn(t, key)).length;
-      const pct = list.length ? Math.round((done / list.length) * 100) : 0;
-      const bar = document.createElement("div");
-      bar.className = "spark-bar" + (i === 0 ? " is-today" : "");
-      bar.title = `${key}: ${pct}%`;
-      const fill = document.createElement("span");
-      fill.style.height = Math.max(pct, 4) + "%";
-      bar.appendChild(fill);
-      el.insightSparkline.appendChild(bar);
+      days.push({
+        key,
+        letter: DAY_NAMES[d.getDay()][0],
+        total: list.length,
+        done,
+        pct: list.length ? Math.round((done / list.length) * 100) : 0,
+        isToday: i === 0,
+      });
     }
+    return days;
+  }
+
+  function renderSparkline(days) {
+    el.insightSparkline.innerHTML = "";
+    days.forEach((day) => {
+      // Each bar carries its weekday letter underneath. Without it the chart
+      // is undecodable on touch, where the hover tooltip never appears.
+      const col = document.createElement("div");
+      col.className = "spark-col";
+      const bar = document.createElement("div");
+      bar.className = "spark-bar" + (day.isToday ? " is-today" : "");
+      bar.title = day.total
+        ? `${day.key}: ${day.done} of ${day.total} done (${day.pct}%)`
+        : `${day.key}: nothing scheduled`;
+      const fill = document.createElement("span");
+      fill.style.height = Math.max(day.pct, day.total ? 4 : 0) + "%";
+      bar.appendChild(fill);
+      const label = document.createElement("span");
+      label.className = "spark-day" + (day.isToday ? " is-today" : "");
+      label.textContent = day.letter;
+      col.append(bar, label);
+      el.insightSparkline.appendChild(col);
+    });
   }
 
   function updateInsights() {
     const todayKey = toDateKey(today);
     const todayList = tasksForDate(todayKey);
     const done = todayList.filter((t) => isDoneOn(t, todayKey)).length;
-    const pct = todayList.length ? Math.round((done / todayList.length) * 100) : 0;
+    const total = todayList.length;
+    const pct = total ? Math.round((done / total) * 100) : 0;
     const offset = RING_CIRCUMFERENCE * (1 - pct / 100);
     el.insightRingValue.style.strokeDasharray = String(RING_CIRCUMFERENCE);
     el.insightRingValue.style.strokeDashoffset = String(offset);
     el.insightRingPct.textContent = pct + "%";
-    el.insightStreak.textContent = String(computeStreak());
-    renderSparkline();
+
+    // Say what the numbers mean in plain words -- a bare "0%" reads as failure
+    // when it often just means the day hasn't started.
+    if (total === 0) {
+      el.insightHeadline.textContent = "Nothing planned today";
+      el.insightSub.textContent = "Tap + LOG ITEM to add your first task.";
+    } else {
+      el.insightHeadline.textContent = `${done} of ${total} done today`;
+      el.insightSub.textContent =
+        done === total ? "All finished — nice work." :
+        done === 0 ? `${total} task${total > 1 ? "s" : ""} still to go.` :
+        `${total - done} left to go.`;
+    }
+
+    const streak = computeStreak();
+    el.insightStreak.textContent = String(streak);
+    el.insightStreakHint.textContent = streak === 0
+      ? "Finish everything you planned for a day to start one."
+      : streak === 1
+        ? "One day down. Finish tomorrow's list to keep it going."
+        : `${streak} days in a row with everything finished.`;
+
+    const days = getWeekCompletion();
+    renderSparkline(days);
+    const active = days.filter((d) => d.total > 0);
+    if (active.length === 0) {
+      el.insightWeekSummary.textContent = "No tasks logged in the last 7 days.";
+    } else {
+      const totalTasks = active.reduce((n, d) => n + d.total, 0);
+      const doneTasks = active.reduce((n, d) => n + d.done, 0);
+      el.insightWeekSummary.textContent =
+        `${doneTasks} of ${totalTasks} finished across ${active.length} day${active.length > 1 ? "s" : ""}.`;
+    }
   }
 
   function renderAll() {

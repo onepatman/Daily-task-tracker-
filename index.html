@@ -123,22 +123,35 @@
       <button class="calendar-toggle" id="calendarToggle">Hide calendar ▲</button>
 
       <section class="insights-panel" id="insightsPanel" hidden>
-        <div class="insight-ring-wrap">
-          <svg class="insight-ring" viewBox="0 0 64 64" width="64" height="64">
-            <circle class="ring-track" cx="32" cy="32" r="27" />
-            <circle class="ring-value" id="insightRingValue" cx="32" cy="32" r="27" />
-          </svg>
-          <div class="insight-ring-label">
-            <span id="insightRingPct">0%</span>
-            <span>today</span>
+        <div class="insight-today">
+          <div class="insight-ring-wrap">
+            <svg class="insight-ring" viewBox="0 0 64 64" width="64" height="64">
+              <circle class="ring-track" cx="32" cy="32" r="27" />
+              <circle class="ring-value" id="insightRingValue" cx="32" cy="32" r="27" />
+            </svg>
+            <div class="insight-ring-label">
+              <span id="insightRingPct">0%</span>
+              <span>today</span>
+            </div>
+          </div>
+          <div class="insight-today-text">
+            <p class="insight-headline" id="insightHeadline">No tasks today</p>
+            <p class="insight-sub" id="insightSub">Add one to get started.</p>
           </div>
         </div>
-        <div class="insight-stats">
-          <div class="insight-stat">
-            <span class="insight-stat-value" id="insightStreak">0</span>
-            <span class="insight-stat-label">day streak</span>
-          </div>
-          <div class="insight-sparkline" id="insightSparkline" aria-label="Last 7 days completion"></div>
+
+        <div class="insight-block">
+          <p class="insight-headline">
+            <span class="icon" data-icon="checkCircle"></span>
+            <span><span id="insightStreak">0</span>-day streak</span>
+          </p>
+          <p class="insight-sub" id="insightStreakHint">Finish everything you planned for a day to start one.</p>
+        </div>
+
+        <div class="insight-block">
+          <p class="insight-block-title">Last 7 days</p>
+          <div class="insight-sparkline" id="insightSparkline"></div>
+          <p class="insight-sub" id="insightWeekSummary">No tasks logged this week yet.</p>
         </div>
       </section>
       <button class="insights-toggle" id="insightsToggle">Show insights ▾</button>
