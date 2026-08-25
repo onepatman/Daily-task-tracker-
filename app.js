@@ -1043,13 +1043,24 @@
       el.yearSelect.appendChild(opt);
     }
   }
+  // Browsing to another month moves the selection into it, keeping the same
+  // day-of-month where the month is long enough. Previously these handlers only
+  // redrew the grid, so the date header underneath kept showing a date from the
+  // month you had navigated away from until you happened to click a day -- which
+  // read as the header lagging a step behind every month change.
+  function setViewedMonth(year, month) {
+    viewYear = year;
+    viewMonth = month;
+    const cur = parseDateKey(selectedDate);
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    selectedDate = toDateKey(new Date(year, month, Math.min(cur.getDate(), lastDay)));
+    renderAll();
+  }
   el.monthSelect.addEventListener("change", () => {
-    viewMonth = Number(el.monthSelect.value);
-    renderCalendar();
+    setViewedMonth(viewYear, Number(el.monthSelect.value));
   });
   el.yearSelect.addEventListener("change", () => {
-    viewYear = Number(el.yearSelect.value);
-    renderCalendar();
+    setViewedMonth(Number(el.yearSelect.value), viewMonth);
   });
   el.todayBtn.addEventListener("click", () => {
     viewYear = today.getFullYear();
@@ -3921,14 +3932,14 @@
 
   // ---------- Calendar nav ----------
   el.prevMonth.addEventListener("click", () => {
-    viewMonth--;
-    if (viewMonth < 0) { viewMonth = 11; viewYear--; }
-    renderCalendar();
+    let m = viewMonth - 1, y = viewYear;
+    if (m < 0) { m = 11; y--; }
+    setViewedMonth(y, m);
   });
   el.nextMonth.addEventListener("click", () => {
-    viewMonth++;
-    if (viewMonth > 11) { viewMonth = 0; viewYear++; }
-    renderCalendar();
+    let m = viewMonth + 1, y = viewYear;
+    if (m > 11) { m = 0; y++; }
+    setViewedMonth(y, m);
   });
   // Both toggles share one chevron icon that rotates, rather than swapping
   // between typed arrow characters -- the two used to disagree (U+25BC vs the
