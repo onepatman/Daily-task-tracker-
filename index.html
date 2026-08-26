@@ -444,9 +444,16 @@
 
     <div class="photo-field">
       <span class="photo-field-label">Photo</span>
-      <div class="photo-field-body">
+      <div class="photo-dropzone" id="photoDropzone" role="button" tabindex="0"
+           aria-label="Add a photo — drag and drop, paste, or activate to choose a file">
+        <div class="photo-dropzone-prompt" id="photoDropzonePrompt">
+          <span class="icon" data-icon="camera"></span>
+          <span class="photo-dropzone-main">Add photo</span>
+          <span class="photo-dropzone-sub">Drag &amp; drop, paste, or tap to choose</span>
+        </div>
         <img id="taskPhotoPreview" class="photo-preview" hidden alt="Attached photo preview" />
-        <button type="button" id="addPhotoBtn" class="btn-ghost btn-small"><span class="icon" data-icon="camera"></span> Add photo</button>
+      </div>
+      <div class="photo-field-body">
         <button type="button" id="removePhotoBtn" class="btn-ghost btn-small" hidden><span class="icon" data-icon="trash"></span> Remove</button>
       </div>
       <input type="file" id="taskPhotoInput" accept="image/*" hidden />

@@ -259,7 +259,8 @@
     taskTag: document.getElementById("taskTag"),
     taskNotes: document.getElementById("taskNotes"),
     taskPhotoPreview: document.getElementById("taskPhotoPreview"),
-    addPhotoBtn: document.getElementById("addPhotoBtn"),
+    photoDropzone: document.getElementById("photoDropzone"),
+    photoDropzonePrompt: document.getElementById("photoDropzonePrompt"),
     removePhotoBtn: document.getElementById("removePhotoBtn"),
     taskPhotoInput: document.getElementById("taskPhotoInput"),
     subtaskFieldProgress: document.getElementById("subtaskFieldProgress"),
@@ -3707,30 +3708,83 @@
     });
   }
   function renderPhotoField() {
-    if (modalPhoto) {
-      el.taskPhotoPreview.src = modalPhoto;
-      el.taskPhotoPreview.hidden = false;
-      el.addPhotoBtn.hidden = true;
-      el.removePhotoBtn.hidden = false;
-    } else {
-      el.taskPhotoPreview.hidden = true;
-      el.taskPhotoPreview.src = "";
-      el.addPhotoBtn.hidden = false;
-      el.removePhotoBtn.hidden = true;
-    }
+    const has = !!modalPhoto;
+    el.taskPhotoPreview.src = has ? modalPhoto : "";
+    el.taskPhotoPreview.hidden = !has;
+    el.photoDropzonePrompt.hidden = has;
+    el.photoDropzone.classList.toggle("has-photo", has);
+    el.removePhotoBtn.hidden = !has;
   }
-  el.addPhotoBtn.addEventListener("click", () => el.taskPhotoInput.click());
-  el.taskPhotoInput.addEventListener("change", async () => {
-    const file = el.taskPhotoInput.files[0];
-    el.taskPhotoInput.value = "";
+  // One path for every way a photo can arrive -- file picker, drop, or paste.
+  async function attachPhotoFile(file) {
     if (!file) return;
+    if (!file.type || !file.type.startsWith("image/")) {
+      showSnackbar("That file isn't an image");
+      return;
+    }
     try {
       modalPhoto = await compressImageFile(file);
       renderPhotoField();
     } catch (e) {
       showSnackbar("Could not attach that photo");
     }
+  }
+
+  el.photoDropzone.addEventListener("click", () => el.taskPhotoInput.click());
+  el.photoDropzone.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.taskPhotoInput.click(); }
   });
+  el.taskPhotoInput.addEventListener("change", async () => {
+    const file = el.taskPhotoInput.files[0];
+    el.taskPhotoInput.value = "";
+    await attachPhotoFile(file);
+  });
+
+  // dragenter/dragleave also fire when the pointer crosses onto a child, so a
+  // plain toggle would flicker the highlight off mid-drag. Count depth instead.
+  let photoDragDepth = 0;
+  const setDragActive = (on) => el.photoDropzone.classList.toggle("is-dragover", on);
+  el.photoDropzone.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    photoDragDepth++;
+    setDragActive(true);
+  });
+  el.photoDropzone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  });
+  el.photoDropzone.addEventListener("dragleave", () => {
+    photoDragDepth = Math.max(0, photoDragDepth - 1);
+    if (photoDragDepth === 0) setDragActive(false);
+  });
+  el.photoDropzone.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    photoDragDepth = 0;
+    setDragActive(false);
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    const file = [...(dt.files || [])].find((f) => f.type.startsWith("image/")) || dt.files[0];
+    await attachPhotoFile(file);
+  });
+  // The browser's default for a file dropped anywhere else is to navigate away
+  // from the page, which would silently discard whatever was being edited.
+  ["dragover", "drop"].forEach((type) => {
+    document.addEventListener(type, (e) => {
+      if (!el.photoDropzone.contains(e.target)) e.preventDefault();
+    });
+  });
+
+  // Paste an image straight into the open modal. Only images are intercepted,
+  // so pasting text into the title or notes still behaves normally.
+  document.addEventListener("paste", async (e) => {
+    if (el.modalOverlay.hidden) return;
+    const items = [...((e.clipboardData && e.clipboardData.items) || [])];
+    const imgItem = items.find((i) => i.kind === "file" && i.type.startsWith("image/"));
+    if (!imgItem) return;
+    e.preventDefault();
+    await attachPhotoFile(imgItem.getAsFile());
+  });
+
   el.removePhotoBtn.addEventListener("click", () => {
     modalPhoto = "";
     renderPhotoField();
