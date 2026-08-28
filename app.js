@@ -260,6 +260,11 @@
     taskNotes: document.getElementById("taskNotes"),
     taskPhotoPreview: document.getElementById("taskPhotoPreview"),
     photoDropzone: document.getElementById("photoDropzone"),
+    lightboxOverlay: document.getElementById("lightboxOverlay"),
+    lightboxStage: document.getElementById("lightboxStage"),
+    lightboxImg: document.getElementById("lightboxImg"),
+    lightboxClose: document.getElementById("lightboxClose"),
+    lightboxHint: document.getElementById("lightboxHint"),
     photoDropzonePrompt: document.getElementById("photoDropzonePrompt"),
     removePhotoBtn: document.getElementById("removePhotoBtn"),
     taskPhotoInput: document.getElementById("taskPhotoInput"),
@@ -392,7 +397,13 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
     } catch (e) {
+      // Photos are stored inline, so a full quota is a realistic failure here.
+      // Staying silent would let the app look saved while the change was lost.
       console.error("Could not save tasks", e);
+      const full = e && (e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED" || e.code === 22);
+      showSnackbar(full
+        ? "Storage is full — remove a photo or delete old tasks"
+        : "Could not save your change");
     }
     pushSyncUpdate();
   }
@@ -772,6 +783,7 @@
     } catch (e) { /* ignore */ }
   }
   function closeTopmostOverlay() {
+    if (!el.lightboxOverlay.hidden) { closeLightbox(); return true; }
     if (!el.modalOverlay.hidden) { closeModal(); return true; }
     if (!el.confirmOverlay.hidden) { closeConfirm(); return true; }
     if (!el.reportOverlay.hidden) { closeReport(); return true; }
@@ -1928,6 +1940,11 @@
       photo.className = "day-detail-card-photo";
       photo.src = task.photo;
       photo.alt = "Attached photo for " + task.title;
+      photo.title = "Open photo";
+      photo.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openLightbox(task.photo, "Attached photo for " + task.title);
+      });
       card.appendChild(photo);
     }
 
@@ -3690,7 +3707,10 @@
         const img = new Image();
         img.onerror = () => reject(new Error("Could not read image"));
         img.onload = () => {
-          const MAX_DIM = 800;
+          // Attachments here are usually screenshots of drawings and comment
+          // threads, so they have to stay legible when opened full screen.
+          // 800px at 0.6 quality smeared that text beyond reading.
+          const MAX_DIM = 1600;
           let { width, height } = img;
           if (width > MAX_DIM || height > MAX_DIM) {
             if (width > height) { height = Math.round(height * (MAX_DIM / width)); width = MAX_DIM; }
@@ -3700,7 +3720,7 @@
           canvas.width = width;
           canvas.height = height;
           canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL("image/jpeg", 0.6));
+          resolve(canvas.toDataURL("image/jpeg", 0.8));
         };
         img.src = String(reader.result);
       };
@@ -3715,6 +3735,42 @@
     el.photoDropzone.classList.toggle("has-photo", has);
     el.removePhotoBtn.hidden = !has;
   }
+  // ---------- Photo lightbox ----------
+  // Opens an attachment full screen. Starts fitted to the window, and a tap
+  // switches to natural size inside a scrollable stage, which is what makes the
+  // fine text on a drawing or a comment thread actually readable.
+  function openLightbox(src, alt) {
+    if (!src) return;
+    el.lightboxImg.src = src;
+    el.lightboxImg.alt = alt || "Attached photo, enlarged";
+    el.lightboxStage.classList.remove("is-zoomed");
+    el.lightboxStage.scrollTop = 0;
+    el.lightboxStage.scrollLeft = 0;
+    el.lightboxHint.textContent = "Tap the photo to zoom in";
+    el.lightboxOverlay.hidden = false;
+    pushOverlayState();
+  }
+  function closeLightbox() {
+    el.lightboxOverlay.hidden = true;
+    el.lightboxImg.src = "";
+    el.lightboxStage.classList.remove("is-zoomed");
+  }
+  function toggleLightboxZoom() {
+    const zoomed = el.lightboxStage.classList.toggle("is-zoomed");
+    el.lightboxHint.textContent = zoomed ? "Tap again to fit to screen" : "Tap the photo to zoom in";
+    if (!zoomed) { el.lightboxStage.scrollTop = 0; el.lightboxStage.scrollLeft = 0; }
+  }
+  el.lightboxImg.addEventListener("click", (e) => { e.stopPropagation(); toggleLightboxZoom(); });
+  el.lightboxClose.addEventListener("click", closeLightbox);
+  // Clicking the backdrop closes, but only the backdrop -- while zoomed the
+  // stage is scrolled around, and a drag ending on it must not count as a tap.
+  el.lightboxStage.addEventListener("click", (e) => {
+    if (e.target === el.lightboxStage) closeLightbox();
+  });
+  el.lightboxOverlay.addEventListener("click", (e) => {
+    if (e.target === el.lightboxOverlay) closeLightbox();
+  });
+
   // One path for every way a photo can arrive -- file picker, drop, or paste.
   async function attachPhotoFile(file) {
     if (!file) return;
@@ -3730,7 +3786,16 @@
     }
   }
 
-  el.photoDropzone.addEventListener("click", () => el.taskPhotoInput.click());
+  el.photoDropzone.addEventListener("click", (e) => {
+    // Once a photo is attached the preview fills the zone, and a tap there
+    // should open it rather than reopen the file picker underneath.
+    if (modalPhoto && e.target === el.taskPhotoPreview) {
+      openLightbox(modalPhoto, "Attached photo, enlarged");
+      return;
+    }
+    if (modalPhoto) return;
+    el.taskPhotoInput.click();
+  });
   el.photoDropzone.addEventListener("keydown", (e) => {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.taskPhotoInput.click(); }
   });
@@ -4023,13 +4088,10 @@
   }
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      if (!el.modalOverlay.hidden) closeModal();
-      else if (!el.confirmOverlay.hidden) closeConfirm();
-      else if (!el.reportOverlay.hidden) closeReport();
-      else if (!el.syncOverlay.hidden) closeSyncOverlay();
-      else if (!el.dayDetailOverlay.hidden) closeDayDetail();
-      else if (!el.moreMenu.hidden) closeMoreMenu();
-      else if (!el.snackbar.hidden) hideSnackbar();
+      // Share the Back button's stack rather than keeping a second copy of it.
+      // The two lists had already drifted once -- a newly added overlay was
+      // dismissable with Back but Escape closed whatever sat underneath it.
+      if (!closeTopmostOverlay() && !el.snackbar.hidden) hideSnackbar();
       return;
     }
     if (!el.modalOverlay.hidden || !el.confirmOverlay.hidden || !el.reportOverlay.hidden) return;
