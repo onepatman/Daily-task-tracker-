@@ -1562,6 +1562,65 @@ html, body {
   border-style: solid;
   cursor: default;
 }
+.photo-dropzone.has-photo .photo-preview { cursor: zoom-in; }
+.day-detail-card-photo { cursor: zoom-in; }
+
+/* ---------- Photo lightbox ---------- */
+.lightbox-overlay {
+  position: fixed; inset: 0;
+  z-index: 95;
+  background: rgba(4, 8, 14, 0.94);
+  display: flex;
+  flex-direction: column;
+}
+.lightbox-close {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top));
+  right: 12px;
+  z-index: 2;
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  cursor: pointer;
+}
+.lightbox-close .icon, .lightbox-close svg { width: 18px; height: 18px; }
+.lightbox-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  padding: 16px;
+  /* Let the browser's own pinch-zoom work on top of the tap-to-zoom toggle. */
+  touch-action: pinch-zoom pan-x pan-y;
+}
+.lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: zoom-in;
+  border-radius: 4px;
+}
+/* Zoomed: drop the fit constraints so the stage scrolls at natural size. */
+.lightbox-stage.is-zoomed { align-items: flex-start; justify-content: flex-start; }
+.lightbox-stage.is-zoomed .lightbox-img {
+  max-width: none;
+  max-height: none;
+  cursor: zoom-out;
+}
+.lightbox-hint {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 10px 16px calc(14px + env(safe-area-inset-bottom));
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255,255,255,0.62);
+}
+
 .photo-dropzone-prompt {
   display: flex;
   flex-direction: column;
