@@ -110,6 +110,7 @@
   let editingDateKey = null;
   let modalSubtasks = [];
   let modalPhoto = "";
+  let modalSnapshot = null;
   let pendingUndo = null;
   let snackbarTimer = null;
   let activeReminderTask = null;
@@ -782,14 +783,17 @@
       }
     } catch (e) { /* ignore */ }
   }
+  // Listed in paint order, topmost first, so Back and Escape always dismiss
+  // whatever is actually on top. z-index: lightbox 95, more-menu 80,
+  // confirm 75, report/sync/day-detail 70, task modal 60.
   function closeTopmostOverlay() {
     if (!el.lightboxOverlay.hidden) { closeLightbox(); return true; }
-    if (!el.modalOverlay.hidden) { closeModal(); return true; }
+    if (!el.moreMenu.hidden) { closeMoreMenu(); return true; }
     if (!el.confirmOverlay.hidden) { closeConfirm(); return true; }
     if (!el.reportOverlay.hidden) { closeReport(); return true; }
     if (!el.syncOverlay.hidden) { closeSyncOverlay(); return true; }
     if (!el.dayDetailOverlay.hidden) { closeDayDetail(); return true; }
-    if (!el.moreMenu.hidden) { closeMoreMenu(); return true; }
+    if (!el.modalOverlay.hidden) { requestCloseModal(); return true; }
     return false;
   }
   window.addEventListener("popstate", () => {
@@ -3886,6 +3890,7 @@
     closeDatePicker();
     closeTimePicker();
     showOverlay(el.modalOverlay, el.taskForm);
+    modalSnapshot = modalStateKey();
     pushOverlayState();
     setTimeout(() => el.taskTitle.focus({ preventScroll: true }), 50);
   }
@@ -3917,11 +3922,15 @@
     closeDatePicker();
     closeTimePicker();
     showOverlay(el.modalOverlay, el.taskForm);
+    modalSnapshot = modalStateKey();
     pushOverlayState();
     setTimeout(() => el.taskTitle.focus({ preventScroll: true }), 50);
   }
   function closeModal() {
     el.modalOverlay.hidden = true;
+    // Drop the baseline so a stale one can't make the next dismissal think
+    // there are unsaved changes when the form has not been opened yet.
+    modalSnapshot = null;
     closeDatePicker();
     closeTimePicker();
   }
@@ -3991,8 +4000,41 @@
 
   el.addTaskBtn.addEventListener("click", openCreateModal);
   el.cancelTask.addEventListener("click", closeModal);
+  // Everything the form currently holds, as one comparable value. Snapshotted
+  // when the modal opens so an accidental dismissal can tell "nothing typed"
+  // from "work about to be thrown away".
+  function modalStateKey() {
+    return JSON.stringify({
+      title: el.taskTitle.value.trim(),
+      date: el.taskDate.value,
+      time: el.taskTime.value,
+      endTime: el.taskEndTime.value,
+      category: el.taskCategory.value,
+      priority: el.taskPriority.value,
+      tag: el.taskTag.value.trim(),
+      repeat: el.taskRepeat.value,
+      repeatDays: modalRepeatDays.slice().sort(),
+      repeatUntil: el.repeatUntil.value,
+      reminder: el.taskReminder.checked,
+      notes: el.taskNotes.value.trim(),
+      photo: modalPhoto,
+      subtasks: modalSubtasks.map((s) => ({ t: s.title, d: !!s.done })),
+    });
+  }
+  function modalIsDirty() {
+    return modalSnapshot !== null && modalStateKey() !== modalSnapshot;
+  }
+  // Used by every accidental route out -- backdrop tap, Escape, Back. The
+  // Cancel button stays direct, since pressing it is a deliberate choice.
+  function requestCloseModal() {
+    if (!modalIsDirty()) { closeModal(); return; }
+    showConfirm("Discard this item? What you typed will be lost.", [
+      { label: "Keep editing", cancel: true },
+      { label: "Discard", danger: true, onClick: closeModal },
+    ]);
+  }
   el.modalOverlay.addEventListener("click", (e) => {
-    if (e.target === el.modalOverlay) closeModal();
+    if (e.target === el.modalOverlay) requestCloseModal();
   });
   el.taskForm.addEventListener("submit", (e) => {
     e.preventDefault();
