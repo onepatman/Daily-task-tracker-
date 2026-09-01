@@ -306,11 +306,16 @@
     <h2 id="modalTitle">Log Item</h2>
 
     <div class="template-row" id="templateRow">
-      <select id="templateSelect" aria-label="Start from template">
-        <option value="">Start from template…</option>
-      </select>
-      <button type="button" id="saveTemplateBtn" class="btn-ghost btn-small" title="Save current form as a template" data-icon="save"></button>
-      <button type="button" id="deleteTemplateBtn" class="btn-ghost btn-small" title="Delete selected template" hidden data-icon="trash"></button>
+      <div class="template-head">
+        <span class="template-head-label">Start from a template</span>
+        <button type="button" id="saveTemplateBtn" class="template-save">
+          <span class="template-save-icon" data-icon="save"></span>Save this one
+        </button>
+      </div>
+      <div class="template-chips" id="templateChips" role="group" aria-label="Your templates"></div>
+      <p class="template-empty" id="templateEmpty">
+        No templates yet. Fill in the form below, then tap <strong>Save this one</strong> — it will show up here as a one-tap button next time.
+      </p>
     </div>
 
     <label>Task

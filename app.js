@@ -217,9 +217,9 @@
     syncBox: document.querySelector("#syncOverlay .report-box"),
     dayDetailBox: document.querySelector("#dayDetailOverlay .day-detail-box"),
     templateRow: document.getElementById("templateRow"),
-    templateSelect: document.getElementById("templateSelect"),
+    templateChips: document.getElementById("templateChips"),
+    templateEmpty: document.getElementById("templateEmpty"),
     saveTemplateBtn: document.getElementById("saveTemplateBtn"),
-    deleteTemplateBtn: document.getElementById("deleteTemplateBtn"),
     taskTitle: document.getElementById("taskTitle"),
     quickParse: document.getElementById("quickParse"),
     quickParseChips: document.getElementById("quickParseChips"),
@@ -3643,21 +3643,71 @@
   });
 
   // ---------- Templates (modal) ----------
+  // Templates used to hide inside a native <select> at the top of the form: you
+  // could not tell whether you had any without opening the dropdown, and with
+  // none saved it opened onto an empty list that looked broken. They are laid
+  // out as chips instead -- every saved template is readable at a glance and one
+  // tap away, and with none saved the row says how to make one.
+  let activeTemplateId = "";
+
   function renderTemplateOptions() {
-    el.templateSelect.innerHTML = '<option value="">Start from template…</option>';
+    el.templateChips.innerHTML = "";
     templates.forEach((t) => {
-      const opt = document.createElement("option");
-      opt.value = t.id;
-      opt.textContent = t.title;
-      el.templateSelect.appendChild(opt);
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "template-chip" + (t.id === activeTemplateId ? " is-active" : "");
+      chip.dataset.id = t.id;
+
+      const label = document.createElement("span");
+      label.className = "template-chip-label";
+      label.textContent = t.title;
+      chip.appendChild(label);
+
+      const meta = templateSummary(t);
+      if (meta) {
+        const sub = document.createElement("span");
+        sub.className = "template-chip-meta";
+        sub.textContent = meta;
+        chip.appendChild(sub);
+      }
+      chip.addEventListener("click", () => applyTemplate(t.id));
+
+      const del = document.createElement("span");
+      del.className = "template-chip-x";
+      del.setAttribute("role", "button");
+      del.setAttribute("tabindex", "0");
+      del.setAttribute("aria-label", `Delete template ${t.title}`);
+      del.innerHTML = iconSvg("close");
+      const remove = (e) => {
+        e.stopPropagation();
+        deleteTemplate(t.id, t.title);
+      };
+      del.addEventListener("click", remove);
+      del.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") remove(e);
+      });
+      chip.appendChild(del);
+
+      el.templateChips.appendChild(chip);
     });
+    el.templateChips.hidden = templates.length === 0;
+    el.templateEmpty.hidden = templates.length > 0;
   }
-  el.templateSelect.addEventListener("change", () => {
-    const id = el.templateSelect.value;
-    el.deleteTemplateBtn.hidden = !id;
-    if (!id) return;
+  // A one-line reminder of what the template carries, so two similarly named
+  // ones are still tellable apart without applying them.
+  function templateSummary(tpl) {
+    const bits = [];
+    if (tpl.time) bits.push(formatTimeDisplay(tpl.time));
+    if (tpl.category) bits.push((CATEGORIES[tpl.category] || CATEGORIES.other).label);
+    if (tpl.repeat && tpl.repeat !== "none") bits.push(repeatLabel(tpl));
+    const steps = (tpl.subtasks || []).length;
+    if (steps) bits.push(steps === 1 ? "1 step" : `${steps} steps`);
+    return bits.join(" · ");
+  }
+  function applyTemplate(id) {
     const tpl = templates.find((t) => t.id === id);
     if (!tpl) return;
+    activeTemplateId = id;
     el.taskTitle.value = tpl.title;
     el.taskCategory.value = tpl.category;
     el.taskPriority.value = tpl.priority;
@@ -3666,14 +3716,41 @@
     el.taskEndTime.value = tpl.endTime || "";
     el.taskEndTimeDisplay.textContent = tpl.endTime ? formatTimeDisplay(tpl.endTime) : "No time set";
     el.taskRepeat.value = tpl.repeat || "none";
+    resetRepeatFields(null);
     el.taskReminder.checked = tpl.reminder !== false;
+    el.taskTag.value = tpl.tag || "";
     el.taskNotes.value = tpl.notes || "";
     modalSubtasks = (tpl.subtasks || []).map((s) => ({ id: uid(), title: s.title, done: false }));
     renderSubtaskList();
-  });
+    // The title was filled in by us, not typed, so no "input" event fired --
+    // clear any chips left from what the user had typed before.
+    clearQuickParse();
+    renderTemplateOptions();
+    showSnackbar(`Filled in from "${tpl.title}"`);
+  }
+  function deleteTemplate(id, title) {
+    showConfirm(`Delete the template "${title}"? Tasks you already made from it stay.`, [
+      { label: "Keep it", cancel: true },
+      {
+        label: "Delete",
+        danger: true,
+        onClick: () => {
+          templates = templates.filter((t) => t.id !== id);
+          saveTemplates();
+          if (activeTemplateId === id) activeTemplateId = "";
+          renderTemplateOptions();
+          showSnackbar(`Template "${title}" deleted`);
+        },
+      },
+    ]);
+  }
   el.saveTemplateBtn.addEventListener("click", () => {
-    const title = el.taskTitle.value.trim();
-    if (!title) { el.taskTitle.focus(); return; }
+    const title = (quickParsed && quickParsed.title ? quickParsed.title : el.taskTitle.value).trim();
+    if (!title) {
+      el.taskTitle.focus();
+      showSnackbar("Give it a name first, then save it as a template");
+      return;
+    }
     const tpl = {
       id: uid(),
       title,
@@ -3683,23 +3760,15 @@
       endTime: el.taskEndTime.value || "",
       repeat: el.taskRepeat.value,
       reminder: el.taskReminder.checked,
+      tag: el.taskTag.value.trim(),
       notes: el.taskNotes.value.trim(),
       subtasks: modalSubtasks.map((s) => ({ title: s.title })),
     };
     templates.push(tpl);
     saveTemplates();
+    activeTemplateId = tpl.id;
     renderTemplateOptions();
-    el.templateSelect.value = tpl.id;
-    el.deleteTemplateBtn.hidden = false;
     showSnackbar(`Template "${title}" saved`);
-  });
-  el.deleteTemplateBtn.addEventListener("click", () => {
-    const id = el.templateSelect.value;
-    if (!id) return;
-    templates = templates.filter((t) => t.id !== id);
-    saveTemplates();
-    renderTemplateOptions();
-    el.deleteTemplateBtn.hidden = true;
   });
 
   // ---------- Photo attachment (modal) ----------
@@ -3884,9 +3953,8 @@
     resetRepeatFields(null);
     el.taskReminder.checked = true;
     el.templateRow.hidden = false;
+    activeTemplateId = "";
     renderTemplateOptions();
-    el.templateSelect.value = "";
-    el.deleteTemplateBtn.hidden = true;
     closeDatePicker();
     closeTimePicker();
     showOverlay(el.modalOverlay, el.taskForm);
