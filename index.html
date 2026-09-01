@@ -87,6 +87,7 @@
               <input type="text" id="preparedByInput" class="menu-text-input" placeholder="Your name"
                      maxlength="60" autocomplete="name" aria-label="Name printed on the sheet" />
             </div>
+            <button type="button" id="menuCategories"><span class="icon" data-icon="tag"></span> Categories…</button>
             <button type="button" id="menuInstall"><span class="icon" data-icon="download"></span> Install app</button>
             <button type="button" id="menuSync"><span class="icon" data-icon="sync"></span> Sync across devices</button>
             <button type="button" id="menuWeeklyReview"><span class="icon" data-icon="barChart"></span> Weekly review</button>
@@ -263,10 +264,33 @@
   </div>
 </div>
 
+<div class="overlay category-overlay" id="categoryOverlay" hidden>
+  <div class="category-panel" id="categoryPanel">
+    <div class="category-head">
+      <h2>Categories</h2>
+      <button type="button" id="closeCategories" class="icon-btn" aria-label="Close" data-icon="close"></button>
+    </div>
+    <p class="category-intro">
+      Rename these to match your own work — Shopdrawing, RFI, Submittal, Site visit.
+      The colour is the stripe down the left of every task row.
+    </p>
+    <div class="category-list" id="categoryList"></div>
+    <form class="category-add" id="categoryAddForm">
+      <input type="text" id="categoryNewName" maxlength="28" placeholder="New category name" aria-label="New category name" />
+      <button type="submit" id="addCategoryBtn" class="btn-primary btn-small">Add</button>
+    </form>
+  </div>
+</div>
+
 <div class="print-preview-backdrop" id="printPreviewBackdrop" hidden></div>
 <div class="print-preview-bar" id="printPreviewBar" hidden>
   <span class="print-preview-title">Print preview</span>
   <span class="print-preview-note" id="printPreviewNote"></span>
+  <div class="print-range" id="printRange">
+    <label>From <input type="date" id="printRangeFrom" /></label>
+    <label>To <input type="date" id="printRangeTo" /></label>
+    <button type="button" id="printRangeReset" class="print-range-reset" hidden>Reset</button>
+  </div>
   <div class="print-preview-actions">
     <button type="button" class="print-preview-print" id="printPreviewPrint">
       <span class="icon" data-icon="printer"></span> Print
@@ -404,14 +428,7 @@
 
     <div class="field-row">
       <label>Category
-        <select id="taskCategory">
-          <option value="work">Work</option>
-          <option value="personal">Personal</option>
-          <option value="urgent">Urgent</option>
-          <option value="health">Health</option>
-          <option value="errands">Errands</option>
-          <option value="other">Other</option>
-        </select>
+        <select id="taskCategory"></select>
       </label>
       <label>Priority
         <select id="taskPriority">
@@ -495,7 +512,7 @@
 
     <div class="modal-actions">
       <button type="button" id="cancelTask" class="btn-ghost">Cancel</button>
-      <button type="submit" class="btn-solid">Save item</button>
+      <button type="submit" id="saveTaskBtn" class="btn-solid">Save item</button>
     </div>
   </form>
 </div>

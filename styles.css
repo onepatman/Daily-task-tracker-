@@ -817,12 +817,9 @@ html, body {
   justify-content: flex-start;
 }
 .task-row.dragging { opacity: 0.5; }
-.task-row.cat-work { border-left-color: var(--cat-work); }
-.task-row.cat-personal { border-left-color: var(--cat-personal); }
-.task-row.cat-urgent { border-left-color: var(--cat-urgent); }
-.task-row.cat-health { border-left-color: var(--cat-health); }
-.task-row.cat-errands { border-left-color: var(--cat-errands); }
-.task-row.cat-other { border-left-color: var(--cat-other); }
+/* One rule instead of six per-name ones: a category invented at runtime
+   has no class to match, so the colour is set on the element itself. */
+.task-row { border-left-color: var(--cat-color, var(--cat-other)); }
 
 .punchlist.manual-sort .task-row { cursor: grab; }
 .punchlist.manual-sort .task-row.dragging { cursor: grabbing; }
@@ -1943,12 +1940,9 @@ html, body {
   font-size: 13px;
   cursor: pointer;
 }
-.timeline-task.cat-work { border-left-color: var(--cat-work); }
-.timeline-task.cat-personal { border-left-color: var(--cat-personal); }
-.timeline-task.cat-urgent { border-left-color: var(--cat-urgent); }
-.timeline-task.cat-health { border-left-color: var(--cat-health); }
-.timeline-task.cat-errands { border-left-color: var(--cat-errands); }
-.timeline-task.cat-other { border-left-color: var(--cat-other); }
+/* One rule instead of six per-name ones: a category invented at runtime
+   has no class to match, so the colour is set on the element itself. */
+.timeline-task { border-left-color: var(--cat-color, var(--cat-other)); }
 .timeline-task.done { opacity: 0.55; text-decoration: line-through; }
 .timeline-task.overdue { background: color-mix(in srgb, var(--red) 12%, var(--surface-2)); }
 .timeline-task.overdue .timeline-task-time { color: var(--red); }
@@ -2135,12 +2129,9 @@ html, body {
   border-radius: 8px;
   cursor: pointer;
 }
-.board-task-row.cat-work { border-left-color: var(--cat-work); }
-.board-task-row.cat-personal { border-left-color: var(--cat-personal); }
-.board-task-row.cat-urgent { border-left-color: var(--cat-urgent); }
-.board-task-row.cat-health { border-left-color: var(--cat-health); }
-.board-task-row.cat-errands { border-left-color: var(--cat-errands); }
-.board-task-row.cat-other { border-left-color: var(--cat-other); }
+/* One rule instead of six per-name ones: a category invented at runtime
+   has no class to match, so the colour is set on the element itself. */
+.board-task-row { border-left-color: var(--cat-color, var(--cat-other)); }
 .board-task-row.overdue { background: color-mix(in srgb, var(--red) 9%, var(--surface-2)); }
 .board-task-main { flex: 1; min-width: 0; }
 .board-task-title-row { display: flex; align-items: center; gap: 6px; }
@@ -2520,12 +2511,9 @@ html, body {
   border-left: 4px solid var(--cat-other);
   padding: 12px;
 }
-.day-detail-card.cat-work { border-left-color: var(--cat-work); }
-.day-detail-card.cat-personal { border-left-color: var(--cat-personal); }
-.day-detail-card.cat-urgent { border-left-color: var(--cat-urgent); }
-.day-detail-card.cat-health { border-left-color: var(--cat-health); }
-.day-detail-card.cat-errands { border-left-color: var(--cat-errands); }
-.day-detail-card.cat-other { border-left-color: var(--cat-other); }
+/* One rule instead of six per-name ones: a category invented at runtime
+   has no class to match, so the colour is set on the element itself. */
+.day-detail-card { border-left-color: var(--cat-color, var(--cat-other)); }
 .day-detail-card-head {
   display: flex;
   align-items: center;
@@ -2722,6 +2710,103 @@ html, body {
   .timeline-task-time { font-size: 13.5px; }
 }
 
+/* ---------- Category manager ---------- */
+.category-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 12, 22, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 70;
+}
+.category-panel {
+  width: min(520px, 100%);
+  max-height: min(80vh, 680px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+.category-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.category-head h2 { margin: 0; font-size: 18px; }
+.category-intro {
+  margin: 8px 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+.category-list { display: flex; flex-direction: column; gap: 8px; }
+.category-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.category-swatch {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 7px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+.category-name {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+}
+.category-name:hover { border-color: var(--border); }
+.category-name:focus { border-color: var(--accent); background: var(--surface); outline: none; }
+.category-count {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.category-delete {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.category-delete .icon { width: 15px; height: 15px; }
+.category-delete:hover:not(:disabled) { color: var(--red); border-color: var(--red); }
+.category-delete:disabled { opacity: 0.3; cursor: not-allowed; }
+.category-add { display: flex; gap: 8px; margin-top: 16px; }
+.category-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
 /* ---------- Print sheet ----------
    A dedicated, purpose-built print document (not a printout of whatever
    on-screen view happens to be visible) -- built fresh from the current
@@ -2904,7 +2989,42 @@ tr.pc-day-group td {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.print-preview-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+.print-range {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.print-range label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.print-range input {
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.print-range-reset {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.print-preview-actions { display: flex; align-items: center; gap: 8px; flex: none; margin-left: 10px; }
 .print-preview-print {
   display: inline-flex;
   align-items: center;
@@ -2950,10 +3070,17 @@ body.print-preview-open .print-sheet {
    real proportions reads far better than squeezing seven columns into 380px,
    so only the table scrolls sideways and the masthead stays put. */
 .print-sheet-tablewrap { overflow-x: auto; }
-@media (max-width: 700px) {
+@media (max-width: 900px) {
+  /* The bar cannot hold a title, a summary, two dates and two buttons on a
+     phone, so the summary and the range labels give way first. */
   .print-preview-title { display: none; }
+  .print-range label { font-size: 0; gap: 0; }
+  .print-preview-note { display: none; }
+}
+@media (max-width: 700px) {
   body.print-preview-open .print-sheet { padding: 20px 16px 32px; top: 60px; }
   body.print-preview-open .print-sheet-table { min-width: 620px; }
+  .print-range input { padding: 5px 6px; font-size: 11px; }
 }
 
 @media print {
