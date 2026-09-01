@@ -1748,6 +1748,19 @@ html, body {
   color: var(--text-faint);
   margin-bottom: 8px;
 }
+.menu-text-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+.menu-text-input::placeholder { color: var(--text-faint); }
+.menu-text-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .accent-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
 .more-menu .accent-swatch {
   display: block;
@@ -2751,6 +2764,8 @@ html, body {
     border-bottom: 1px solid #bbb;
   }
   .print-sheet-meta div { display: flex; flex-direction: column; gap: 2px; }
+  /* The flex rule above would otherwise re-show the hidden "Showing" cell. */
+  .print-sheet-meta div[hidden] { display: none; }
   .print-sheet-meta span {
     font-family: var(--font-mono);
     font-size: 9px;
@@ -2781,12 +2796,33 @@ html, body {
     vertical-align: top;
   }
   .pc-no { width: 32px; font-family: var(--font-mono); text-align: center; }
+  .pc-date { width: 58px; font-family: var(--font-mono); font-size: 10px; white-space: nowrap; }
   .pc-cat, .pc-pri { width: 70px; }
   .pc-time { width: 90px; font-family: var(--font-mono); white-space: nowrap; }
   .pc-status { width: 60px; font-family: var(--font-mono); font-weight: 700; text-align: center; }
+  .pc-status-sub { margin-top: 2px; font-size: 9px; font-weight: 400; color: #555; }
+  .pc-title { font-weight: 600; }
+  .pc-tag { margin-top: 2px; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; color: #444; }
   .pc-notes { margin-top: 3px; font-size: 10px; color: #555; }
+  /* Steps sit under the note, indented behind a rule so a long task reads as
+     one block rather than running into the next row. */
+  .pc-subs { margin-top: 4px; padding-left: 7px; border-left: 2px solid #ccc; }
+  .pc-subs-head {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #666;
+    margin-bottom: 2px;
+  }
+  .pc-sub { font-size: 10px; color: #333; line-height: 1.45; }
+  .pc-sub-box { font-family: var(--font-mono); font-weight: 700; }
+  .pc-sub.is-done { color: #666; }
+  .pc-sub.is-done .pc-sub-box { color: #1a7a3c; }
   tr.pc-done .pc-status { color: #1a7a3c; }
-  tr.pc-done .pc-task { color: #555; text-decoration: line-through; }
+  /* Strike the title only. Struck-through notes and a struck-through step list
+     are unreadable, and the point of printing them is to be read. */
+  tr.pc-done .pc-title { color: #555; text-decoration: line-through; }
   tr.pc-day-group td {
     background: #dde3ea;
     font-family: var(--font-mono);
@@ -2796,16 +2832,19 @@ html, body {
     border: 1px solid #999;
     padding: 5px 8px;
   }
+  .pc-group-meta { float: right; font-weight: 400; color: #444; letter-spacing: 0.04em; }
   .pc-empty { text-align: center; color: #777; padding: 18px 8px; }
   .print-sheet-table tr { break-inside: avoid; }
+  .print-sheet-table thead { display: table-header-group; }
   .print-sheet-footer {
     display: flex;
-    justify-content: space-between;
-    gap: 40px;
     margin-top: 48px;
   }
-  .print-sign-block { flex: 1; display: flex; flex-direction: column; }
-  .print-sign-line { border-top: 1px solid #111; margin-top: 30px; }
+  .print-sign-block { width: 320px; display: flex; flex-direction: column; }
+  /* Enough room above the rule to counter-sign by hand even when the name is
+     already printed there. */
+  .print-sign-name { min-height: 26px; margin-top: 8px; font-size: 13px; font-weight: 600; }
+  .print-sign-line { border-top: 1px solid #111; }
   .print-sign-label {
     font-family: var(--font-mono);
     font-size: 9px;

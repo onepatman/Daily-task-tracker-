@@ -7,6 +7,7 @@
   const TEXT_SIZE_KEY = "dailyLog.textSize";
   const TEMPLATES_KEY = "dailyLog.templates.v1";
   const FILTERS_KEY = "dailyLog.filters";
+  const PREPARED_BY_KEY = "dailyLog.preparedBy";
   const MONTHS = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY",
     "AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
   const DAY_NAMES = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
@@ -83,6 +84,10 @@
   let selectedDate = toDateKey(today);
   let tasks = loadTasks();
   let templates = loadTemplates();
+  // Name printed on the "Prepared by" line. Typed once in the menu and kept, so
+  // a sheet comes off the printer already complete instead of needing a pen.
+  let preparedBy = "";
+  try { preparedBy = localStorage.getItem(PREPARED_BY_KEY) || ""; } catch (e) { preparedBy = ""; }
   let calendarOpen = true;
   let insightsOpen = false;
   let searchQuery = "";
@@ -204,9 +209,14 @@
     boardView: document.getElementById("boardView"),
     printSheetTitle: document.getElementById("printSheetTitle"),
     printPeriod: document.getElementById("printPeriod"),
+    printFilterWrap: document.getElementById("printFilterWrap"),
+    printFilter: document.getElementById("printFilter"),
     printGenerated: document.getElementById("printGenerated"),
     printCompletion: document.getElementById("printCompletion"),
+    printSheetHead: document.getElementById("printSheetHead"),
     printSheetBody: document.getElementById("printSheetBody"),
+    printPreparedName: document.getElementById("printPreparedName"),
+    preparedByInput: document.getElementById("preparedByInput"),
     taskList: document.getElementById("taskList"),
     emptyState: document.getElementById("emptyState"),
     addTaskBtn: document.getElementById("addTaskBtn"),
@@ -3094,26 +3104,109 @@
   }
 
   // ---------- Print ----------
-  function buildPrintRow(task, dateKey, index) {
+  // The sheet mirrors what you were looking at when you asked for it. The tab
+  // decides the slice, and the search box and filter chips narrow it exactly as
+  // they do on screen -- printing the unfiltered day while the screen showed
+  // one client's work was the main complaint.
+  //
+  //   board            -> every match, grouped by client/project. Board is not
+  //                       tied to a date, so searching a client there is a
+  //                       request for that client's whole history, not for
+  //                       whichever month happens to be on the calendar.
+  //   week             -> that week, grouped by day.
+  //   home/day/timeline-> the whole month, grouped by day. A single day was too
+  //                       thin to be worth taking to a meeting.
+  function printScopeForView() {
+    if (currentView === "board") return "project";
+    if (currentView === "week") return "week";
+    return "month";
+  }
+  const PRINT_COLUMNS = {
+    dated: [["pc-no", "No."], ["pc-task", "Task Description"], ["pc-cat", "Category"],
+            ["pc-pri", "Priority"], ["pc-time", "Time"], ["pc-status", "Status"]],
+    // Project rows come from all over the calendar, so each one has to say when
+    // it was due -- there is no day heading above it to carry that.
+    project: [["pc-no", "No."], ["pc-date", "Date"], ["pc-task", "Task Description"], ["pc-cat", "Category"],
+              ["pc-pri", "Priority"], ["pc-time", "Time"], ["pc-status", "Status"]],
+  };
+  function buildPrintHead(cols) {
+    el.printSheetHead.innerHTML = "";
+    const tr = document.createElement("tr");
+    cols.forEach(([cls, label]) => {
+      const th = document.createElement("th");
+      th.className = cls;
+      th.textContent = label;
+      tr.appendChild(th);
+    });
+    el.printSheetHead.appendChild(tr);
+  }
+  function shortDateLabel(dateKey) {
+    const d = parseDateKey(dateKey);
+    return `${MONTHS[d.getMonth()].slice(0, 3).toUpperCase()} ${d.getDate()}`;
+  }
+  // withDate/withTag say which of the two things a group heading already
+  // carries: day headings repeat no date, project headings repeat no tag.
+  function buildPrintRow(task, dateKey, index, { withDate = false, withTag = true } = {}) {
     const done = isDoneOn(task, dateKey);
     const cat = CATEGORIES[task.category] || CATEGORIES.other;
     const pri = PRIORITIES[task.priority] || PRIORITIES.medium;
+    const subs = task.subtasks || [];
+    const subsDone = subs.filter((s) => s.done).length;
     const tr = document.createElement("tr");
     if (done) tr.className = "pc-done";
 
     const tdNo = document.createElement("td");
     tdNo.className = "pc-no";
     tdNo.textContent = String(index).padStart(2, "0");
+    tr.appendChild(tdNo);
+
+    if (withDate) {
+      const tdDate = document.createElement("td");
+      tdDate.className = "pc-date";
+      tdDate.textContent = shortDateLabel(dateKey);
+      tr.appendChild(tdDate);
+    }
 
     const tdTask = document.createElement("td");
     tdTask.className = "pc-task";
-    tdTask.textContent = task.title;
+    const title = document.createElement("div");
+    title.className = "pc-title";
+    title.textContent = task.title;
+    tdTask.appendChild(title);
+    if (task.tag && withTag) {
+      const tag = document.createElement("div");
+      tag.className = "pc-tag";
+      tag.textContent = task.tag;
+      tdTask.appendChild(tag);
+    }
     if (task.notes) {
       const notes = document.createElement("div");
       notes.className = "pc-notes";
       notes.textContent = task.notes;
       tdTask.appendChild(notes);
     }
+    // Under the note, the steps and which of them were actually accomplished --
+    // a sheet that only shows the parent task cannot be checked against.
+    if (subs.length) {
+      const wrap = document.createElement("div");
+      wrap.className = "pc-subs";
+      const head = document.createElement("div");
+      head.className = "pc-subs-head";
+      head.textContent = `Subtasks — ${subsDone}/${subs.length} done`;
+      wrap.appendChild(head);
+      subs.forEach((s) => {
+        const line = document.createElement("div");
+        line.className = "pc-sub" + (s.done ? " is-done" : "");
+        const box = document.createElement("span");
+        box.className = "pc-sub-box";
+        box.textContent = s.done ? "[x]" : "[ ]";
+        line.appendChild(box);
+        line.appendChild(document.createTextNode(" " + s.title));
+        wrap.appendChild(line);
+      });
+      tdTask.appendChild(wrap);
+    }
+    tr.appendChild(tdTask);
 
     const tdCat = document.createElement("td");
     tdCat.className = "pc-cat";
@@ -3129,68 +3222,151 @@
 
     const tdStatus = document.createElement("td");
     tdStatus.className = "pc-status";
-    tdStatus.textContent = done ? "DONE" : "OPEN";
+    const word = document.createElement("div");
+    word.textContent = done ? "DONE" : "OPEN";
+    tdStatus.appendChild(word);
+    if (subs.length) {
+      const frac = document.createElement("div");
+      frac.className = "pc-status-sub";
+      frac.textContent = `${subsDone}/${subs.length}`;
+      tdStatus.appendChild(frac);
+    }
 
-    tr.append(tdNo, tdTask, tdCat, tdPri, tdTime, tdStatus);
+    tr.append(tdCat, tdPri, tdTime, tdStatus);
     return tr;
   }
-  function buildPrintDayGroupRow(dateKey) {
+  function buildPrintGroupRow(label, meta, colSpan) {
     const tr = document.createElement("tr");
     tr.className = "pc-day-group";
     const td = document.createElement("td");
-    td.colSpan = 6;
-    td.textContent = formatDateDisplay(dateKey).toUpperCase();
+    td.colSpan = colSpan;
+    td.textContent = label;
+    if (meta) {
+      const m = document.createElement("span");
+      m.className = "pc-group-meta";
+      m.textContent = meta;
+      td.appendChild(m);
+    }
     tr.appendChild(td);
     return tr;
+  }
+  // Says on the paper why some items are missing, so a filtered sheet is not
+  // mistaken for the full log.
+  function printFilterNote() {
+    const bits = [];
+    const q = searchQuery.trim();
+    if (q) bits.push(`matching “${q}”`);
+    if (activeCategories.size) {
+      bits.push(Array.from(activeCategories).map((c) => (CATEGORIES[c] || CATEGORIES.other).label).join(" / "));
+    }
+    if (activePriorities.size) {
+      bits.push(Array.from(activePriorities).map((p) => (PRIORITIES[p] || PRIORITIES.medium).label).join(" / ") + " priority");
+    }
+    return bits.join(" · ");
   }
   function buildPrintSheet() {
     el.printSheetBody.innerHTML = "";
     const now = new Date();
     el.printGenerated.textContent = `${MONTHS[now.getMonth()].slice(0, 3)} ${now.getDate()}, ${now.getFullYear()} ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 
-    let allTasks = [];
-    if (currentView === "week") {
-      const weekStart = getWeekStart(selectedDate);
-      el.printSheetTitle.textContent = "Weekly Task Log";
-      const startKey = toDateKey(weekStart);
-      const endDate = new Date(weekStart); endDate.setDate(endDate.getDate() + 6);
-      el.printPeriod.textContent = `${formatDateDisplay(startKey)} – ${formatDateDisplay(toDateKey(endDate))}`;
-      let index = 1;
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(weekStart); d.setDate(d.getDate() + i);
+    const scope = printScopeForView();
+    const cols = PRINT_COLUMNS[scope === "project" ? "project" : "dated"];
+    buildPrintHead(cols);
+
+    const note = printFilterNote();
+    el.printFilterWrap.hidden = !note;
+    el.printFilter.textContent = note || "—";
+
+    el.printPreparedName.textContent = preparedBy;
+
+    const counted = [];
+    let index = 1;
+    const addDatedRange = (startDate, days) => {
+      for (let i = 0; i < days; i++) {
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + i);
         const dateKey = toDateKey(d);
-        const dayTasks = tasksForDate(dateKey).slice().sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
+        const dayTasks = getVisibleTasks(dateKey);
         if (!dayTasks.length) continue;
-        el.printSheetBody.appendChild(buildPrintDayGroupRow(dateKey));
+        const doneN = dayTasks.filter((t) => isDoneOn(t, dateKey)).length;
+        el.printSheetBody.appendChild(
+          buildPrintGroupRow(formatDateDisplay(dateKey).toUpperCase(), `${doneN}/${dayTasks.length} done`, cols.length));
         dayTasks.forEach((t) => {
           el.printSheetBody.appendChild(buildPrintRow(t, dateKey, index++));
-          allTasks.push({ t, dateKey });
+          counted.push({ t, dateKey });
         });
       }
+    };
+
+    if (scope === "week") {
+      const weekStart = getWeekStart(selectedDate);
+      const endDate = new Date(weekStart);
+      endDate.setDate(endDate.getDate() + 6);
+      el.printSheetTitle.textContent = "Weekly Task Log";
+      el.printPeriod.textContent = `${formatDateDisplay(toDateKey(weekStart))} – ${formatDateDisplay(toDateKey(endDate))}`;
+      addDatedRange(weekStart, 7);
+    } else if (scope === "month") {
+      const sel = parseDateKey(selectedDate);
+      const first = new Date(sel.getFullYear(), sel.getMonth(), 1);
+      const days = new Date(sel.getFullYear(), sel.getMonth() + 1, 0).getDate();
+      el.printSheetTitle.textContent = "Monthly Task Log";
+      el.printPeriod.textContent = `${MONTHS[sel.getMonth()]} ${sel.getFullYear()}`;
+      addDatedRange(first, days);
     } else {
-      el.printSheetTitle.textContent = "Daily Task Log";
-      el.printPeriod.textContent = formatDateDisplay(selectedDate);
-      const dayTasks = tasksForDate(selectedDate).slice().sort((a, b) => (a.time || "99:99").localeCompare(b.time || "99:99"));
-      dayTasks.forEach((t, i) => {
-        el.printSheetBody.appendChild(buildPrintRow(t, selectedDate, i + 1));
-        allTasks.push({ t, dateKey: selectedDate });
+      // Grouped by client/project, the same grouping and order the Board shows.
+      el.printSheetTitle.textContent = "Project Task Log";
+      const list = getAllFilteredTasks();
+      const groups = new Map();
+      list.forEach((t) => {
+        const key = (t.tag || "").trim();
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(t);
       });
+      const tagKeys = Array.from(groups.keys()).filter((k) => k !== "").sort((a, b) => a.localeCompare(b));
+      if (groups.has("")) tagKeys.push("");
+
+      let earliest = null;
+      let latest = null;
+      tagKeys.forEach((tagKey) => {
+        const groupTasks = groups.get(tagKey).sort((a, b) =>
+          a.startDate.localeCompare(b.startDate) || (a.time || "99:99").localeCompare(b.time || "99:99"));
+        const doneN = groupTasks.filter((t) => isDoneOn(t, t.startDate)).length;
+        el.printSheetBody.appendChild(buildPrintGroupRow(
+          (tagKey || "No client / project").toUpperCase(), `${doneN}/${groupTasks.length} done`, cols.length));
+        groupTasks.forEach((t) => {
+          el.printSheetBody.appendChild(buildPrintRow(t, t.startDate, index++, { withDate: true, withTag: false }));
+          counted.push({ t, dateKey: t.startDate });
+          if (!earliest || t.startDate < earliest) earliest = t.startDate;
+          if (!latest || t.startDate > latest) latest = t.startDate;
+        });
+      });
+      el.printPeriod.textContent = earliest
+        ? (earliest === latest ? formatDateDisplay(earliest)
+                               : `${formatDateDisplay(earliest)} – ${formatDateDisplay(latest)}`)
+        : "—";
     }
 
-    if (!allTasks.length) {
+    if (!counted.length) {
       const tr = document.createElement("tr");
       const td = document.createElement("td");
-      td.colSpan = 6;
+      td.colSpan = cols.length;
       td.className = "pc-empty";
-      td.textContent = "No tasks logged for this period.";
+      td.textContent = note
+        ? "Nothing matches those filters for this period."
+        : "No tasks logged for this period.";
       tr.appendChild(td);
       el.printSheetBody.appendChild(tr);
       el.printCompletion.textContent = "—";
     } else {
-      const done = allTasks.filter(({ t, dateKey }) => isDoneOn(t, dateKey)).length;
-      el.printCompletion.textContent = `${done}/${allTasks.length} completed`;
+      const done = counted.filter(({ t, dateKey }) => isDoneOn(t, dateKey)).length;
+      el.printCompletion.textContent = `${done}/${counted.length} completed`;
     }
   }
+  el.preparedByInput.value = preparedBy;
+  el.preparedByInput.addEventListener("input", () => {
+    preparedBy = el.preparedByInput.value.trim();
+    try { localStorage.setItem(PREPARED_BY_KEY, preparedBy); } catch (e) { /* name is a convenience; a full disk should not block typing */ }
+  });
   el.menuPrint.addEventListener("click", () => {
     closeMoreMenu();
     buildPrintSheet();
