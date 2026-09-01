@@ -82,6 +82,11 @@
                 <button type="button" class="accent-swatch" data-accent="pink" aria-label="Pink"></button>
               </div>
             </div>
+            <div class="menu-accent-row">
+              <span class="menu-accent-label">Prepared by</span>
+              <input type="text" id="preparedByInput" class="menu-text-input" placeholder="Your name"
+                     maxlength="60" autocomplete="name" aria-label="Name printed on the sheet" />
+            </div>
             <button type="button" id="menuInstall"><span class="icon" data-icon="download"></span> Install app</button>
             <button type="button" id="menuSync"><span class="icon" data-icon="sync"></span> Sync across devices</button>
             <button type="button" id="menuWeeklyReview"><span class="icon" data-icon="barChart"></span> Weekly review</button>
@@ -266,25 +271,20 @@
   <h1 class="print-sheet-title" id="printSheetTitle">—</h1>
   <div class="print-sheet-meta">
     <div><span>Period</span><strong id="printPeriod">—</strong></div>
+    <div id="printFilterWrap" hidden><span>Showing</span><strong id="printFilter">—</strong></div>
     <div><span>Generated</span><strong id="printGenerated">—</strong></div>
     <div><span>Completion</span><strong id="printCompletion">—</strong></div>
   </div>
   <table class="print-sheet-table" id="printSheetTable">
-    <thead>
-      <tr>
-        <th class="pc-no">No.</th>
-        <th class="pc-task">Task Description</th>
-        <th class="pc-cat">Category</th>
-        <th class="pc-pri">Priority</th>
-        <th class="pc-time">Time</th>
-        <th class="pc-status">Status</th>
-      </tr>
-    </thead>
+    <thead id="printSheetHead"></thead>
     <tbody id="printSheetBody"></tbody>
   </table>
   <div class="print-sheet-footer">
-    <div class="print-sign-block"><span class="print-sign-label">Prepared by</span><span class="print-sign-line"></span></div>
-    <div class="print-sign-block"><span class="print-sign-label">Reviewed / Approved by</span><span class="print-sign-line"></span></div>
+    <div class="print-sign-block">
+      <span class="print-sign-label">Prepared by</span>
+      <span class="print-sign-name" id="printPreparedName"></span>
+      <span class="print-sign-line"></span>
+    </div>
   </div>
 </div>
 
