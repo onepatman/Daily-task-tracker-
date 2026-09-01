@@ -209,6 +209,8 @@
     boardView: document.getElementById("boardView"),
     printSheetTitle: document.getElementById("printSheetTitle"),
     printPeriod: document.getElementById("printPeriod"),
+    printClientWrap: document.getElementById("printClientWrap"),
+    printClient: document.getElementById("printClient"),
     printFilterWrap: document.getElementById("printFilterWrap"),
     printFilter: document.getElementById("printFilter"),
     printGenerated: document.getElementById("printGenerated"),
@@ -3153,7 +3155,12 @@
     const subs = task.subtasks || [];
     const subsDone = subs.filter((s) => s.done).length;
     const tr = document.createElement("tr");
-    if (done) tr.className = "pc-done";
+    if (done) tr.classList.add("pc-done");
+    // A row with a long step list can be taller than the space left on the
+    // page. Kept unbreakable it would be pushed whole to the next sheet and
+    // leave most of a page blank, so a long one is allowed to continue
+    // overleaf instead; short rows still stay in one piece.
+    if (subs.length >= 5) tr.classList.add("pc-tall");
 
     const tdNo = document.createElement("td");
     tdNo.className = "pc-no";
@@ -3250,12 +3257,19 @@
     tr.appendChild(td);
     return tr;
   }
-  // Says on the paper why some items are missing, so a filtered sheet is not
+  // On a report header the search term is almost always a client, so it is
+  // printed under its own "Client / Project" heading rather than as a sentence.
+  // If what was typed names a real tag, the tag's own capitalisation is used --
+  // "sullivan" typed in a hurry should still read "Sullivan" on paper.
+  function printClientLabel(q) {
+    const lower = q.toLowerCase();
+    const match = tasks.find((t) => (t.tag || "").trim().toLowerCase() === lower);
+    return match ? match.tag.trim() : q;
+  }
+  // Category/priority chips get their own heading, so a narrowed sheet is not
   // mistaken for the full log.
-  function printFilterNote() {
+  function printChipNote() {
     const bits = [];
-    const q = searchQuery.trim();
-    if (q) bits.push(`matching “${q}”`);
     if (activeCategories.size) {
       bits.push(Array.from(activeCategories).map((c) => (CATEGORIES[c] || CATEGORIES.other).label).join(" / "));
     }
@@ -3273,9 +3287,13 @@
     const cols = PRINT_COLUMNS[scope === "project" ? "project" : "dated"];
     buildPrintHead(cols);
 
-    const note = printFilterNote();
-    el.printFilterWrap.hidden = !note;
-    el.printFilter.textContent = note || "—";
+    const query = searchQuery.trim();
+    el.printClientWrap.hidden = !query;
+    el.printClient.textContent = query ? printClientLabel(query) : "—";
+    const chipNote = printChipNote();
+    el.printFilterWrap.hidden = !chipNote;
+    el.printFilter.textContent = chipNote || "—";
+    const narrowed = Boolean(query || chipNote);
 
     el.printPreparedName.textContent = preparedBy;
 
@@ -3351,7 +3369,7 @@
       const td = document.createElement("td");
       td.colSpan = cols.length;
       td.className = "pc-empty";
-      td.textContent = note
+      td.textContent = narrowed
         ? "Nothing matches those filters for this period."
         : "No tasks logged for this period.";
       tr.appendChild(td);
