@@ -58,14 +58,75 @@
     });
   }
 
-  const CATEGORIES = {
-    work:     { label: "Work",     color: "var(--cat-work)" },
-    personal: { label: "Personal", color: "var(--cat-personal)" },
-    urgent:   { label: "Urgent",   color: "var(--cat-urgent)" },
-    health:   { label: "Health",   color: "var(--cat-health)" },
-    errands:  { label: "Errands",  color: "var(--cat-errands)" },
-    other:    { label: "Other",    color: "var(--cat-other)" },
-  };
+  // Categories are the user's own list now, not a fixed set. The six below are
+  // only the starting point on a first run -- an engineer wants Shopdrawing /
+  // RFI / Submittal far more than Health / Errands. "other" is the fallback for
+  // a task whose category was deleted, so it can be renamed and recoloured but
+  // never removed.
+  const CATEGORY_FALLBACK = "other";
+  const DEFAULT_CATEGORIES = [
+    { key: "work",     label: "Work",     color: "#5b8def" },
+    { key: "personal", label: "Personal", color: "#b57bf2" },
+    { key: "urgent",   label: "Urgent",   color: "#f76e6e" },
+    { key: "health",   label: "Health",   color: "#3ecf8e" },
+    { key: "errands",  label: "Errands",  color: "#f5a94e" },
+    { key: CATEGORY_FALLBACK, label: "Other", color: "#8a97ab" },
+  ];
+  const CATEGORY_SWATCHES = [
+    "#5b8def", "#b57bf2", "#f76e6e", "#3ecf8e", "#f5a94e", "#8a97ab",
+    "#2fb8c6", "#e0709f", "#8db600", "#c98b3a", "#7a86f5", "#d4534f",
+  ];
+  const CATEGORIES_KEY = "dailyLog.categories.v1";
+  let categories = loadCategories();
+
+  function loadCategories() {
+    try {
+      const raw = localStorage.getItem(CATEGORIES_KEY);
+      if (!raw) return DEFAULT_CATEGORIES.map((c) => Object.assign({}, c));
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || !parsed.length) throw new Error("empty");
+      const clean = parsed
+        .filter((c) => c && typeof c.key === "string" && c.key)
+        .map((c) => ({ key: c.key, label: String(c.label || c.key), color: c.color || "#8a97ab" }));
+      // The fallback has to exist or a task pointing at a deleted category
+      // would render with no colour and no name.
+      if (!clean.some((c) => c.key === CATEGORY_FALLBACK)) {
+        clean.push(Object.assign({}, DEFAULT_CATEGORIES[DEFAULT_CATEGORIES.length - 1]));
+      }
+      return clean;
+    } catch (e) {
+      console.error("Could not read categories", e);
+      return DEFAULT_CATEGORIES.map((c) => Object.assign({}, c));
+    }
+  }
+  function saveCategories() {
+    try {
+      localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+    } catch (e) {
+      console.error("Could not save categories", e);
+    }
+  }
+  function catInfo(key) {
+    return categories.find((c) => c.key === key)
+      || categories.find((c) => c.key === CATEGORY_FALLBACK)
+      || DEFAULT_CATEGORIES[DEFAULT_CATEGORIES.length - 1];
+  }
+  function categoryExists(key) {
+    return categories.some((c) => c.key === key);
+  }
+  // Colours are set on the element rather than matched by a per-name CSS rule,
+  // which is the only way a category invented at runtime can be coloured at all.
+  function applyCategoryColor(elm, key) {
+    elm.style.setProperty("--cat-color", catInfo(key).color);
+  }
+  function categoryKeyFrom(label) {
+    const base = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "cat";
+    let key = base;
+    let n = 2;
+    while (categoryExists(key)) key = `${base}-${n++}`;
+    return key;
+  }
+
   const PRIORITIES = {
     high:   { label: "High",   color: "var(--red)" },
     medium: { label: "Medium", color: "var(--amber)" },
@@ -86,6 +147,8 @@
   let templates = loadTemplates();
   // Name printed on the "Prepared by" line. Typed once in the menu and kept, so
   // a sheet comes off the printer already complete instead of needing a pen.
+  let modalPhotoPending = null;   // Blob picked but not yet committed
+  let modalPhotoPendingUrl = "";  // object URL previewing that Blob
   let preparedBy = "";
   try { preparedBy = localStorage.getItem(PREPARED_BY_KEY) || ""; } catch (e) { preparedBy = ""; }
   let calendarOpen = true;
@@ -220,9 +283,19 @@
     printSheetBody: document.getElementById("printSheetBody"),
     printPreparedName: document.getElementById("printPreparedName"),
     preparedByInput: document.getElementById("preparedByInput"),
+    menuCategories: document.getElementById("menuCategories"),
+    categoryOverlay: document.getElementById("categoryOverlay"),
+    categoryPanel: document.getElementById("categoryPanel"),
+    categoryList: document.getElementById("categoryList"),
+    categoryAddForm: document.getElementById("categoryAddForm"),
+    categoryNewName: document.getElementById("categoryNewName"),
+    closeCategories: document.getElementById("closeCategories"),
     printPreviewBackdrop: document.getElementById("printPreviewBackdrop"),
     printPreviewBar: document.getElementById("printPreviewBar"),
     printPreviewNote: document.getElementById("printPreviewNote"),
+    printRangeFrom: document.getElementById("printRangeFrom"),
+    printRangeTo: document.getElementById("printRangeTo"),
+    printRangeReset: document.getElementById("printRangeReset"),
     printPreviewPrint: document.getElementById("printPreviewPrint"),
     printPreviewClose: document.getElementById("printPreviewClose"),
     taskList: document.getElementById("taskList"),
@@ -328,6 +401,138 @@
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
+  function escapeRegExp(str) {
+    return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  // ---------- Photo store (IndexedDB) ----------
+  // Photos used to live inside the tasks JSON in localStorage as base64 data
+  // URLs. A 1600px drawing screenshot is ~300-600KB once base64'd, against a
+  // ~5MB localStorage quota -- so roughly a dozen attachments filled the store,
+  // and from then on NOTHING could be saved: not another photo, not a task, not
+  // a ticked checkbox. IndexedDB stores the blobs themselves, has orders of
+  // magnitude more room, and keeps the image bytes out of the JSON that has to
+  // be parsed and re-serialised on every single edit.
+  //
+  // task.photo is a reference now, not the image:
+  //   ""           no photo
+  //   "idb:<id>"   a blob in the object store below
+  //   "data:..."   a legacy inline photo, moved into the store on startup
+  const PHOTO_DB_NAME = "dailyLogPhotos";
+  const PHOTO_STORE = "photos";
+  const PHOTO_REF_PREFIX = "idb:";
+  const photoUrlCache = new Map(); // ref -> object URL
+  let photoDbPromise = null;
+
+  const isPhotoRef = (v) => typeof v === "string" && v.startsWith(PHOTO_REF_PREFIX);
+  const photoIdOf = (ref) => ref.slice(PHOTO_REF_PREFIX.length);
+
+  function openPhotoDb() {
+    if (photoDbPromise) return photoDbPromise;
+    photoDbPromise = new Promise((resolve, reject) => {
+      if (!window.indexedDB) { reject(new Error("IndexedDB unavailable")); return; }
+      const req = indexedDB.open(PHOTO_DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(PHOTO_STORE)) db.createObjectStore(PHOTO_STORE, { keyPath: "id" });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return photoDbPromise;
+  }
+  function photoTx(mode, run) {
+    return openPhotoDb().then((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction(PHOTO_STORE, mode);
+      const req = run(tx.objectStore(PHOTO_STORE));
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+      // Resolve on complete, not on the request: a write is only durable once
+      // its transaction has committed.
+      tx.oncomplete = () => resolve(req ? req.result : undefined);
+    }));
+  }
+  function putPhoto(blob) {
+    const id = uid();
+    return photoTx("readwrite", (s) => s.put({ id, blob, addedAt: Date.now() }))
+      .then(() => PHOTO_REF_PREFIX + id);
+  }
+  function getPhotoBlob(ref) {
+    if (!isPhotoRef(ref)) return Promise.resolve(null);
+    return photoTx("readonly", (s) => s.get(photoIdOf(ref)))
+      .then((rec) => (rec && rec.blob) || null)
+      .catch(() => null);
+  }
+  function deletePhoto(ref) {
+    if (!isPhotoRef(ref)) return Promise.resolve();
+    const url = photoUrlCache.get(ref);
+    if (url) { URL.revokeObjectURL(url); photoUrlCache.delete(ref); }
+    return photoTx("readwrite", (s) => s.delete(photoIdOf(ref))).catch(() => {});
+  }
+  function photoUrl(ref) {
+    if (!ref) return Promise.resolve("");
+    if (!isPhotoRef(ref)) return Promise.resolve(ref); // legacy inline photo
+    const cached = photoUrlCache.get(ref);
+    if (cached) return Promise.resolve(cached);
+    return getPhotoBlob(ref).then((blob) => {
+      if (!blob) return "";
+      const url = URL.createObjectURL(blob);
+      photoUrlCache.set(ref, url);
+      return url;
+    });
+  }
+  // Points an <img> at a reference. An already-seen photo is assigned
+  // synchronously so re-rendering a list does not blink it away and back.
+  function setPhotoSrc(img, ref) {
+    if (!ref) { img.removeAttribute("src"); return; }
+    if (!isPhotoRef(ref)) { img.src = ref; return; }
+    const cached = photoUrlCache.get(ref);
+    if (cached) { img.src = cached; return; }
+    photoUrl(ref).then((url) => { if (url) img.src = url; });
+  }
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(blob);
+    });
+  }
+  function dataUrlToBlob(dataUrl) {
+    // fetch() parses data: URLs, which beats hand-rolling base64 decoding.
+    return fetch(dataUrl).then((r) => r.blob());
+  }
+  // Moves any inline photo left over from the old format into the store. A
+  // photo that cannot be moved keeps its inline copy rather than being lost.
+  async function migrateInlinePhotos() {
+    const inline = tasks.filter((t) => t.photo && !isPhotoRef(t.photo));
+    if (!inline.length) return false;
+    let moved = 0;
+    for (const t of inline) {
+      try {
+        t.photo = await putPhoto(await dataUrlToBlob(t.photo));
+        moved++;
+      } catch (e) {
+        console.error("photo migration failed for", t.id, e);
+      }
+    }
+    if (moved) saveTasks();
+    return moved > 0;
+  }
+  // Blobs whose task is gone. Deleting a task does NOT delete its photo -- the
+  // delete is undoable from the snackbar, and an undo must not restore a task
+  // whose attachment has already been thrown away. The bytes are reclaimed here
+  // on the next start instead, once the undo window is definitively over.
+  async function sweepOrphanPhotos() {
+    try {
+      const keys = await photoTx("readonly", (s) => s.getAllKeys());
+      if (!keys || !keys.length) return;
+      const used = new Set(tasks.filter((t) => isPhotoRef(t.photo)).map((t) => photoIdOf(t.photo)));
+      for (const id of keys) {
+        if (!used.has(id)) await deletePhoto(PHOTO_REF_PREFIX + id);
+      }
+    } catch (e) { /* a failed sweep only costs disk space */ }
+  }
+
   function getWeekStart(dateKey) {
     const d = parseDateKey(dateKey);
     d.setDate(d.getDate() - d.getDay());
@@ -483,7 +688,7 @@
   // a task title like "high voltage panel" or "Monday briefing" would otherwise
   // silently rewrite the priority or the date. Only dates, times and repeats
   // read as plain English, since those are unambiguous enough in context.
-  const QA_CATEGORY_WORDS = Object.keys(CATEGORIES);
+  const qaCategoryWords = () => categories.map((c) => c.key);
   const QA_PRIORITY_WORDS = { high: "high", hi: "high", med: "medium", medium: "medium", low: "low" };
 
   function qaNextWeekday(targetDow, skipAWeek) {
@@ -517,8 +722,12 @@
       cut(/#\s*[^#]+$/);
     }
 
-    const catM = text.match(new RegExp(`@(${QA_CATEGORY_WORDS.join("|")})\\b`, "i"));
-    if (catM) { found.category = catM[1].toLowerCase(); cut(new RegExp(`@${catM[1]}\\b`, "i")); }
+    // Built from the live list, so a category invented this morning is
+    // recognised by "@shopdrawing" this afternoon. Longest first, or "@rfi"
+    // would win over "@rfi-response".
+    const catWords = qaCategoryWords().slice().sort((a, b) => b.length - a.length).map(escapeRegExp);
+    const catM = catWords.length && text.match(new RegExp(`@(${catWords.join("|")})\\b`, "i"));
+    if (catM) { found.category = catM[1].toLowerCase(); cut(new RegExp(`@${escapeRegExp(catM[1])}\\b`, "i")); }
 
     const priWordM = text.match(new RegExp(`!(${Object.keys(QA_PRIORITY_WORDS).join("|")})\\b`, "i"));
     if (priWordM) {
@@ -809,6 +1018,7 @@
     if (!el.moreMenu.hidden) { closeMoreMenu(); return true; }
     if (!el.confirmOverlay.hidden) { closeConfirm(); return true; }
     if (!el.printPreviewBar.hidden) { closePrintPreview(); return true; }
+    if (!el.categoryOverlay.hidden) { closeCategories(); return true; }
     if (!el.reportOverlay.hidden) { closeReport(); return true; }
     if (!el.syncOverlay.hidden) { closeSyncOverlay(); return true; }
     if (!el.dayDetailOverlay.hidden) { closeDayDetail(); return true; }
@@ -1151,7 +1361,7 @@
             dot.textContent = `+${cats.length - 2}`;
           } else {
             dot.className = "cal-day-dot";
-            dot.style.setProperty("--dot-color", (CATEGORIES[cat] || CATEGORIES.other).color);
+            dot.style.setProperty("--dot-color", catInfo(cat).color);
           }
           dotsWrap.appendChild(dot);
         });
@@ -1236,7 +1446,7 @@
     });
   }
   function renderCategoryChips() {
-    const opts = Object.entries(CATEGORIES).map(([key, info]) => ({ key, label: info.label, color: info.color }));
+    const opts = categories.map((c) => ({ key: c.key, label: c.label, color: c.color }));
     renderChipGroup(el.categoryChips, opts, activeCategories, () => { saveFilters(); renderCurrentView(); });
   }
   function renderPriorityChips() {
@@ -1371,10 +1581,11 @@
 
     const selected = selectMode && selectedTaskIds.has(task.id);
     const row = document.createElement("div");
-    row.className = "task-row cat-" + (CATEGORIES[task.category] ? task.category : "other") + (done ? " done" : "")
+    row.className = "task-row" + (done ? " done" : "")
       + (isOverdue(dateKey, task, done) ? " overdue" : "")
       + (task.priority === "high" && !done ? " is-high" : "")
       + (selectMode ? " select-mode" : "") + (selected ? " selected" : "");
+    applyCategoryColor(row, task.category);
     row.draggable = isManualSort() && !selectMode;
     row.addEventListener("click", () => {
       if (!selectMode) return;
@@ -1437,11 +1648,11 @@
 
     const meta = document.createElement("div");
     meta.className = "task-meta";
-    const catInfo = CATEGORIES[task.category] || CATEGORIES.other;
+    const cat = catInfo(task.category);
     const catChip = document.createElement("span");
     catChip.className = "task-cat-chip";
-    catChip.style.background = catInfo.color;
-    catChip.textContent = catInfo.label;
+    catChip.style.background = cat.color;
+    catChip.textContent = cat.label;
     meta.appendChild(catChip);
 
     if (task.tag) {
@@ -1814,7 +2025,7 @@
           row.className = "week-task-row" + (tDone ? " done" : "") + (tOverdue ? " overdue" : "");
           const dot = document.createElement("span");
           dot.className = "week-task-cat-dot";
-          dot.style.background = (CATEGORIES[t.category] || CATEGORIES.other).color;
+          dot.style.background = catInfo(t.category).color;
           const ttl = document.createElement("span");
           ttl.className = "week-task-title";
           renderHighlightedText(ttl, t.title, searchQuery);
@@ -1919,8 +2130,9 @@
   function buildDayDetailCard(task, dateKey, showActions) {
     const done = isDoneOn(task, dateKey);
     const card = document.createElement("div");
-    card.className = "day-detail-card cat-" + (CATEGORIES[task.category] ? task.category : "other")
+    card.className = "day-detail-card"
       + (isOverdue(dateKey, task, done) ? " overdue" : "");
+    applyCategoryColor(card, task.category);
 
     const head = document.createElement("div");
     head.className = "day-detail-card-head";
@@ -1949,11 +2161,11 @@
 
     const meta = document.createElement("div");
     meta.className = "day-detail-card-meta";
-    const catInfo = CATEGORIES[task.category] || CATEGORIES.other;
+    const cat = catInfo(task.category);
     const catChip = document.createElement("span");
     catChip.className = "task-cat-chip";
-    catChip.style.background = catInfo.color;
-    catChip.textContent = catInfo.label;
+    catChip.style.background = cat.color;
+    catChip.textContent = cat.label;
     meta.appendChild(catChip);
     if (task.tag) {
       const tagChip = document.createElement("span");
@@ -1988,7 +2200,7 @@
     if (task.photo) {
       const photo = document.createElement("img");
       photo.className = "day-detail-card-photo";
-      photo.src = task.photo;
+      setPhotoSrc(photo, task.photo);
       photo.alt = "Attached photo for " + task.title;
       photo.title = "Open photo";
       photo.addEventListener("click", (e) => {
@@ -2114,8 +2326,9 @@
   function buildTimelineTask(t, showTime) {
     const done = isDoneOn(t, selectedDate);
     const item = document.createElement("div");
-    item.className = "timeline-task cat-" + (CATEGORIES[t.category] ? t.category : "other") + (done ? " done" : "")
+    item.className = "timeline-task" + (done ? " done" : "")
       + (isOverdue(selectedDate, t, done) ? " overdue" : "");
+    applyCategoryColor(item, t.category);
     if (showTime) {
       const time = document.createElement("span");
       time.className = "timeline-task-time";
@@ -2419,9 +2632,10 @@
     dateKey = dateKey || task.startDate;
     const done = isDoneOn(task, dateKey);
     const row = document.createElement("div");
-    row.className = "board-task-row cat-" + (CATEGORIES[task.category] ? task.category : "other") + (done ? " done" : "")
+    row.className = "board-task-row" + (done ? " done" : "")
       + (isOverdue(dateKey, task, done) ? " overdue" : "")
       + (task.priority === "high" && !done ? " is-high" : "");
+    applyCategoryColor(row, task.category);
 
     const check = document.createElement("button");
     check.type = "button";
@@ -2454,11 +2668,11 @@
     dateSpan.className = "task-priority";
     dateSpan.textContent = `${MONTHS[dateObj.getMonth()].slice(0, 3)} ${dateObj.getDate()}` + (task.time ? `, ${timeRangeLabel(task)}` : "");
     meta.appendChild(dateSpan);
-    const catInfo = CATEGORIES[task.category] || CATEGORIES.other;
+    const cat = catInfo(task.category);
     const catChip = document.createElement("span");
     catChip.className = "task-cat-chip";
-    catChip.style.background = catInfo.color;
-    catChip.textContent = catInfo.label;
+    catChip.style.background = cat.color;
+    catChip.textContent = cat.label;
     meta.appendChild(catChip);
     if (showTag && task.tag) {
       const tagChip = document.createElement("span");
@@ -2689,7 +2903,7 @@
       const list = document.createElement("div");
       list.className = "report-cat-list";
       catEntries.forEach(([cat, count]) => {
-        const info = CATEGORIES[cat] || CATEGORIES.other;
+        const info = catInfo(cat);
         const row = document.createElement("div");
         row.className = "report-cat-row";
         const dot = document.createElement("span");
@@ -2817,8 +3031,14 @@
       }
       const data = snap.data();
       applyingRemoteUpdate = true;
-      tasks = (data.tasks || []).map(migrateTask);
+      tasks = mergeRemoteTasks(data.tasks);
       templates = data.templates || [];
+      if (Array.isArray(data.categories) && data.categories.length) {
+        categories = data.categories;
+        saveCategories();
+        renderCategorySelect();
+        renderCategoryChips();
+      }
       saveLocalOnly();
       applyingRemoteUpdate = false;
       syncCode = code;
@@ -2846,8 +3066,14 @@
       const data = snap.data();
       if (data.updatedAtLocal === lastPushedAt) { syncStatus = "synced"; renderSyncBody(); return; }
       applyingRemoteUpdate = true;
-      tasks = (data.tasks || []).map(migrateTask);
+      tasks = mergeRemoteTasks(data.tasks);
       templates = data.templates || [];
+      if (Array.isArray(data.categories) && data.categories.length) {
+        categories = data.categories;
+        saveCategories();
+        renderCategorySelect();
+        renderCategoryChips();
+      }
       saveLocalOnly();
       applyingRemoteUpdate = false;
       renderAll();
@@ -2862,6 +3088,23 @@
     renderSyncBody();
   }
 
+  // Photos are deliberately left out of the synced payload. A Firestore
+  // document is capped at 1 MiB, and one inlined attachment was enough to blow
+  // that cap -- which failed the whole write, so a single photo could stop
+  // every later change from syncing at all. The reference travels; the bytes
+  // stay on the device that took them.
+  function tasksForSync() {
+    return tasks.map((t) => (t.photo ? Object.assign({}, t, { photo: "" }) : t));
+  }
+  // A remote copy has no photos in it, so a naive overwrite would strip the
+  // attachments off this device's own tasks. Keep what is already here.
+  function mergeRemoteTasks(remote) {
+    const localPhotos = new Map(tasks.filter((t) => t.photo).map((t) => [t.id, t.photo]));
+    return (remote || []).map(migrateTask).map((t) => {
+      if (!t.photo && localPhotos.has(t.id)) t.photo = localPhotos.get(t.id);
+      return t;
+    });
+  }
   function pushSyncUpdate() {
     if (!syncCode || applyingRemoteUpdate) return;
     ensureFirebase().then(() => {
@@ -2874,7 +3117,7 @@
           // this call doesn't know about (e.g. fcmTokens registered by the
           // push-notifications feature).
           await fbApi.setDoc(syncDocRef(syncCode), {
-            tasks, templates,
+            tasks: tasksForSync(), templates, categories,
             updatedAt: fbApi.serverTimestamp(),
             updatedAtLocal: lastPushedAt,
           }, { merge: true });
@@ -3152,7 +3395,14 @@
   //   week             -> that week, grouped by day.
   //   home/day/timeline-> the whole month, grouped by day. A single day was too
   //                       thin to be worth taking to a meeting.
+  // An explicit From/To beats the tab. A client asking for "everything from
+  // Aug 1 to Sep 15" does not care which tab happened to be open, and the
+  // month/week scopes could not express that range at all.
+  let printRangeFrom = "";
+  let printRangeTo = "";
+  function printRangeActive() { return Boolean(printRangeFrom && printRangeTo); }
   function printScopeForView() {
+    if (printRangeActive()) return "range";
     if (currentView === "board") return "project";
     if (currentView === "week") return "week";
     return "month";
@@ -3184,7 +3434,7 @@
   // carries: day headings repeat no date, project headings repeat no tag.
   function buildPrintRow(task, dateKey, index, { withDate = false, withTag = true } = {}) {
     const done = isDoneOn(task, dateKey);
-    const cat = CATEGORIES[task.category] || CATEGORIES.other;
+    const cat = catInfo(task.category);
     const pri = PRIORITIES[task.priority] || PRIORITIES.medium;
     const subs = task.subtasks || [];
     const subsDone = subs.filter((s) => s.done).length;
@@ -3305,7 +3555,7 @@
   function printChipNote() {
     const bits = [];
     if (activeCategories.size) {
-      bits.push(Array.from(activeCategories).map((c) => (CATEGORIES[c] || CATEGORIES.other).label).join(" / "));
+      bits.push(Array.from(activeCategories).map((c) => catInfo(c).label).join(" / "));
     }
     if (activePriorities.size) {
       bits.push(Array.from(activePriorities).map((p) => (PRIORITIES[p] || PRIORITIES.medium).label).join(" / ") + " priority");
@@ -3350,7 +3600,14 @@
       }
     };
 
-    if (scope === "week") {
+    if (scope === "range") {
+      const from = parseDateKey(printRangeFrom);
+      const to = parseDateKey(printRangeTo);
+      const days = Math.round((to - from) / 86400000) + 1;
+      el.printSheetTitle.textContent = "Task Log";
+      el.printPeriod.textContent = `${formatDateDisplay(printRangeFrom)} – ${formatDateDisplay(printRangeTo)}`;
+      addDatedRange(from, days);
+    } else if (scope === "week") {
       const weekStart = getWeekStart(selectedDate);
       const endDate = new Date(weekStart);
       endDate.setDate(endDate.getDate() + 6);
@@ -3422,18 +3679,36 @@
   // Preview first. On Home/Day/Timeline the sheet is a whole month, which you
   // could not see anywhere in the app before -- the views show one day at a
   // time -- so it had to be printed to be read.
-  function openPrintPreview() {
+  // Re-runs the build and the summary line. Called on open and on every change
+  // to the range, so the preview always shows what Print would produce.
+  function refreshPrintPreview() {
     buildPrintSheet();
     const rows = el.printSheetBody.querySelectorAll("tr:not(.pc-day-group)").length;
     const empty = el.printSheetBody.querySelector(".pc-empty");
     el.printPreviewNote.textContent =
       `${el.printSheetTitle.textContent} · ${el.printPeriod.textContent} · ` +
       (empty ? "nothing to print" : `${rows} item${rows === 1 ? "" : "s"}`);
+    el.printRangeReset.hidden = !printRangeActive();
+  }
+  function openPrintPreview() {
+    refreshPrintPreview();
     el.printPreviewBackdrop.hidden = false;
     el.printPreviewBar.hidden = false;
     document.body.classList.add("print-preview-open");
     el.printSheet.scrollTop = 0;
     pushOverlayState();
+  }
+  function onPrintRangeChanged() {
+    const from = el.printRangeFrom.value;
+    const to = el.printRangeTo.value;
+    // A backwards range would silently print nothing, so it is corrected here
+    // rather than left to produce a confusing empty sheet.
+    if (from && to && to < from) {
+      el.printRangeTo.value = from;
+    }
+    printRangeFrom = el.printRangeFrom.value;
+    printRangeTo = el.printRangeTo.value;
+    refreshPrintPreview();
   }
   function closePrintPreview() {
     document.body.classList.remove("print-preview-open");
@@ -3443,6 +3718,14 @@
   el.menuPrint.addEventListener("click", () => {
     closeMoreMenu();
     openPrintPreview();
+  });
+  el.printRangeFrom.addEventListener("change", onPrintRangeChanged);
+  el.printRangeTo.addEventListener("change", onPrintRangeChanged);
+  el.printRangeReset.addEventListener("click", () => {
+    printRangeFrom = printRangeTo = "";
+    el.printRangeFrom.value = "";
+    el.printRangeTo.value = "";
+    refreshPrintPreview();
   });
   el.printPreviewPrint.addEventListener("click", () => window.print());
   el.printPreviewClose.addEventListener("click", closePrintPreview);
@@ -3517,7 +3800,7 @@
     if (task.notes) lines.push("DESCRIPTION:" + icsEscapeText(task.notes));
     const priorityMap = { high: 1, medium: 5, low: 9 };
     lines.push("PRIORITY:" + (priorityMap[task.priority] || 5));
-    lines.push("CATEGORIES:" + icsEscapeText((CATEGORIES[task.category] || CATEGORIES.other).label));
+    lines.push("CATEGORIES:" + icsEscapeText(catInfo(task.category).label));
     lines.push("STATUS:CONFIRMED");
     lines.push("END:VEVENT");
     return lines;
@@ -3532,9 +3815,24 @@
     closeMoreMenu();
     downloadBlob(`daily-log-export-${toDateKey(today)}.ics`, buildIcsCalendar(tasks), "text/calendar");
   });
-  el.menuExportJson.addEventListener("click", () => {
+  // A backup has to stand on its own, so photos are inlined back into the JSON
+  // on the way out even though they no longer live there.
+  async function tasksForExport() {
+    return Promise.all(tasks.map(async (t) => {
+      if (!isPhotoRef(t.photo)) return t;
+      const blob = await getPhotoBlob(t.photo);
+      return Object.assign({}, t, { photo: blob ? await blobToDataUrl(blob) : "" });
+    }));
+  }
+  el.menuExportJson.addEventListener("click", async () => {
     closeMoreMenu();
-    downloadBlob(`daily-log-export-${toDateKey(today)}.json`, JSON.stringify(tasks, null, 2), "application/json");
+    try {
+      const payload = await tasksForExport();
+      downloadBlob(`daily-log-export-${toDateKey(today)}.json`, JSON.stringify(payload, null, 2), "application/json");
+    } catch (e) {
+      console.error("export failed", e);
+      showSnackbar("Could not build the export file");
+    }
   });
   el.menuExportCsv.addEventListener("click", () => {
     closeMoreMenu();
@@ -3554,13 +3852,21 @@
     const file = el.importFileInput.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const imported = JSON.parse(String(reader.result));
         if (!Array.isArray(imported)) throw new Error("Invalid file");
         const existingIds = new Set(tasks.map((t) => t.id));
         const migrated = imported.map(migrateTask);
         const toAdd = migrated.filter((t) => !existingIds.has(t.id));
+        // Exports carry photos inline; they belong in the store, not in the
+        // tasks JSON, or an import would refill localStorage with base64.
+        for (const t of toAdd) {
+          if (t.photo && !isPhotoRef(t.photo)) {
+            try { t.photo = await putPhoto(await dataUrlToBlob(t.photo)); }
+            catch (err) { t.photo = ""; }
+          }
+        }
         tasks = tasks.concat(toAdd);
         saveTasks();
         renderAll();
@@ -3949,7 +4255,7 @@
   function templateSummary(tpl) {
     const bits = [];
     if (tpl.time) bits.push(formatTimeDisplay(tpl.time));
-    if (tpl.category) bits.push((CATEGORIES[tpl.category] || CATEGORIES.other).label);
+    if (tpl.category) bits.push(catInfo(tpl.category).label);
     if (tpl.repeat && tpl.repeat !== "none") bits.push(repeatLabel(tpl));
     const steps = (tpl.subtasks || []).length;
     if (steps) bits.push(steps === 1 ? "1 step" : `${steps} steps`);
@@ -4022,6 +4328,152 @@
     showSnackbar(`Template "${title}" saved`);
   });
 
+  // ---------- Category manager ----------
+  function renderCategorySelect() {
+    const current = el.taskCategory.value;
+    el.taskCategory.innerHTML = "";
+    categories.forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = c.key;
+      opt.textContent = c.label;
+      el.taskCategory.appendChild(opt);
+    });
+    // Keep the open form's choice if it still exists, so renaming a category
+    // while the modal is behind this panel does not silently reassign the task.
+    el.taskCategory.value = categoryExists(current) ? current : categories[0].key;
+  }
+  function categoryUsageCount(key) {
+    return tasks.filter((t) => t.category === key).length;
+  }
+  function renderCategoryList() {
+    el.categoryList.innerHTML = "";
+    categories.forEach((c) => {
+      const row = document.createElement("div");
+      row.className = "category-row";
+      row.dataset.key = c.key;
+
+      const swatch = document.createElement("button");
+      swatch.type = "button";
+      swatch.className = "category-swatch";
+      swatch.style.background = c.color;
+      swatch.setAttribute("aria-label", `Change the colour of ${c.label}`);
+      swatch.addEventListener("click", () => cycleCategoryColor(c.key));
+      row.appendChild(swatch);
+
+      const name = document.createElement("input");
+      name.type = "text";
+      name.className = "category-name";
+      name.value = c.label;
+      name.maxLength = 28;
+      name.setAttribute("aria-label", `Name of the ${c.label} category`);
+      const commit = () => {
+        const next = name.value.trim();
+        if (!next || next === c.label) { name.value = c.label; return; }
+        c.label = next;
+        saveCategories();
+        renderCategorySelect();
+        renderCategoryChips();
+        renderAll();
+      };
+      name.addEventListener("blur", commit);
+      name.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); name.blur(); } });
+      row.appendChild(name);
+
+      const count = document.createElement("span");
+      count.className = "category-count";
+      const n = categoryUsageCount(c.key);
+      count.textContent = n === 1 ? "1 task" : `${n} tasks`;
+      row.appendChild(count);
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "category-delete";
+      del.innerHTML = iconSvg("trash");
+      if (c.key === CATEGORY_FALLBACK) {
+        // Everything deleted lands here, so this one has to survive.
+        del.disabled = true;
+        del.title = "Other is where tasks go when their category is deleted";
+      } else {
+        del.title = `Delete ${c.label}`;
+        del.addEventListener("click", () => deleteCategory(c.key));
+      }
+      row.appendChild(del);
+
+      el.categoryList.appendChild(row);
+    });
+  }
+  function cycleCategoryColor(key) {
+    const c = categories.find((x) => x.key === key);
+    if (!c) return;
+    const i = CATEGORY_SWATCHES.indexOf(c.color);
+    c.color = CATEGORY_SWATCHES[(i + 1) % CATEGORY_SWATCHES.length];
+    saveCategories();
+    renderCategoryList();
+    renderCategoryChips();
+    renderAll();
+  }
+  function deleteCategory(key) {
+    const c = categories.find((x) => x.key === key);
+    if (!c || key === CATEGORY_FALLBACK) return;
+    const n = categoryUsageCount(key);
+    const msg = n
+      ? `Delete "${c.label}"? ${n} task${n === 1 ? "" : "s"} using it will move to Other — no task is deleted.`
+      : `Delete "${c.label}"?`;
+    showConfirm(msg, [
+      { label: "Keep it", cancel: true },
+      {
+        label: "Delete",
+        danger: true,
+        onClick: () => {
+          categories = categories.filter((x) => x.key !== key);
+          // Reassign rather than orphan: a task pointing at a category that no
+          // longer exists would drop out of every category filter.
+          tasks.forEach((t) => { if (t.category === key) t.category = CATEGORY_FALLBACK; });
+          if (activeCategories.has(key)) { activeCategories.delete(key); saveFilters(); }
+          saveCategories();
+          saveTasks();
+          renderCategoryList();
+          renderCategorySelect();
+          renderCategoryChips();
+          renderAll();
+          showSnackbar(n ? `"${c.label}" deleted — ${n} task${n === 1 ? "" : "s"} moved to Other` : `"${c.label}" deleted`);
+        },
+      },
+    ]);
+  }
+  function openCategories() {
+    renderCategoryList();
+    showOverlay(el.categoryOverlay, el.categoryPanel);
+    pushOverlayState();
+  }
+  function closeCategories() {
+    el.categoryOverlay.hidden = true;
+  }
+  el.menuCategories.addEventListener("click", () => { closeMoreMenu(); openCategories(); });
+  el.closeCategories.addEventListener("click", closeCategories);
+  el.categoryOverlay.addEventListener("click", (e) => {
+    if (e.target === el.categoryOverlay) closeCategories();
+  });
+  el.categoryAddForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const label = el.categoryNewName.value.trim();
+    if (!label) return;
+    if (categories.some((c) => c.label.toLowerCase() === label.toLowerCase())) {
+      showSnackbar(`"${label}" is already on the list`);
+      return;
+    }
+    // New ones go above Other, which stays the last resort at the bottom.
+    const cat = { key: categoryKeyFrom(label), label, color: CATEGORY_SWATCHES[categories.length % CATEGORY_SWATCHES.length] };
+    const at = categories.findIndex((c) => c.key === CATEGORY_FALLBACK);
+    if (at === -1) categories.push(cat); else categories.splice(at, 0, cat);
+    saveCategories();
+    el.categoryNewName.value = "";
+    renderCategoryList();
+    renderCategorySelect();
+    renderCategoryChips();
+    showSnackbar(`"${label}" added`);
+  });
+
   // ---------- Photo attachment (modal) ----------
   function compressImageFile(file) {
     return new Promise((resolve, reject) => {
@@ -4044,7 +4496,11 @@
           canvas.width = width;
           canvas.height = height;
           canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL("image/jpeg", 0.8));
+          // A Blob, not a data URL: it goes straight into IndexedDB, and skips
+          // the ~33% base64 inflation the old inline format paid for.
+          canvas.toBlob(
+            (blob) => (blob ? resolve(blob) : reject(new Error("Could not encode image"))),
+            "image/jpeg", 0.8);
         };
         img.src = String(reader.result);
       };
@@ -4052,12 +4508,37 @@
     });
   }
   function renderPhotoField() {
-    const has = !!modalPhoto;
-    el.taskPhotoPreview.src = has ? modalPhoto : "";
+    const has = !!(modalPhoto || modalPhotoPendingUrl);
+    if (modalPhotoPendingUrl) el.taskPhotoPreview.src = modalPhotoPendingUrl;
+    else if (modalPhoto) setPhotoSrc(el.taskPhotoPreview, modalPhoto);
+    else el.taskPhotoPreview.removeAttribute("src");
     el.taskPhotoPreview.hidden = !has;
     el.photoDropzonePrompt.hidden = has;
     el.photoDropzone.classList.toggle("has-photo", has);
     el.removePhotoBtn.hidden = !has;
+  }
+  // A newly picked photo is held in memory and only written to the store when
+  // the form is submitted, so a cancelled edit cannot leave an orphan blob.
+  function clearPendingPhoto() {
+    if (modalPhotoPendingUrl) URL.revokeObjectURL(modalPhotoPendingUrl);
+    modalPhotoPending = null;
+    modalPhotoPendingUrl = "";
+  }
+  function setPendingPhoto(blob) {
+    clearPendingPhoto();
+    modalPhotoPending = blob;
+    modalPhotoPendingUrl = URL.createObjectURL(blob);
+  }
+  // Resolves what the task's photo field should become, writing or deleting in
+  // the store as needed. previousRef is what the task held before this edit.
+  async function commitModalPhoto(previousRef) {
+    if (modalPhotoPending) {
+      const ref = await putPhoto(modalPhotoPending);
+      if (previousRef && previousRef !== ref) await deletePhoto(previousRef);
+      return ref;
+    }
+    if (!modalPhoto && previousRef) { await deletePhoto(previousRef); return ""; }
+    return modalPhoto;
   }
   // ---------- Photo lightbox ----------
   // Opens an attachment full screen. Starts fitted to the window, and a tap
@@ -4065,7 +4546,7 @@
   // fine text on a drawing or a comment thread actually readable.
   function openLightbox(src, alt) {
     if (!src) return;
-    el.lightboxImg.src = src;
+    setPhotoSrc(el.lightboxImg, src);
     el.lightboxImg.alt = alt || "Attached photo, enlarged";
     el.lightboxStage.classList.remove("is-zoomed");
     el.lightboxStage.scrollTop = 0;
@@ -4103,7 +4584,8 @@
       return;
     }
     try {
-      modalPhoto = await compressImageFile(file);
+      setPendingPhoto(await compressImageFile(file));
+      modalPhoto = "";
       renderPhotoField();
     } catch (e) {
       showSnackbar("Could not attach that photo");
@@ -4113,11 +4595,12 @@
   el.photoDropzone.addEventListener("click", (e) => {
     // Once a photo is attached the preview fills the zone, and a tap there
     // should open it rather than reopen the file picker underneath.
-    if (modalPhoto && e.target === el.taskPhotoPreview) {
-      openLightbox(modalPhoto, "Attached photo, enlarged");
+    const shown = modalPhotoPendingUrl || modalPhoto;
+    if (shown && e.target === el.taskPhotoPreview) {
+      openLightbox(shown, "Attached photo, enlarged");
       return;
     }
-    if (modalPhoto) return;
+    if (shown) return;
     el.taskPhotoInput.click();
   });
   el.photoDropzone.addEventListener("keydown", (e) => {
@@ -4175,6 +4658,7 @@
   });
 
   el.removePhotoBtn.addEventListener("click", () => {
+    clearPendingPhoto();
     modalPhoto = "";
     renderPhotoField();
   });
@@ -4187,6 +4671,7 @@
     modalSubtasks = [];
     renderSubtaskList();
     modalPhoto = "";
+    clearPendingPhoto();
     renderPhotoField();
     el.modalTitle.textContent = "Log Item";
     clearQuickParse();
@@ -4233,6 +4718,7 @@
     modalSubtasks = (task.subtasks || []).map((s) => ({ ...s }));
     renderSubtaskList();
     modalPhoto = task.photo || "";
+    clearPendingPhoto();
     renderPhotoField();
     el.modalTitle.textContent = "Edit Item";
     clearQuickParse();
@@ -4246,6 +4732,7 @@
     setTimeout(() => el.taskTitle.focus({ preventScroll: true }), 50);
   }
   function closeModal() {
+    clearPendingPhoto();
     el.modalOverlay.hidden = true;
     // Drop the baseline so a stale one can't make the next dismissal think
     // there are unsaved changes when the form has not been opened yet.
@@ -4291,7 +4778,7 @@
     }
     if (p.category) {
       el.taskCategory.value = p.category;
-      hits.push({ label: (CATEGORIES[p.category] || CATEGORIES.other).label, tone: "" });
+      hits.push({ label: catInfo(p.category).label, tone: "" });
     }
     if (p.tag) {
       el.taskTag.value = p.tag;
@@ -4336,7 +4823,10 @@
       repeatUntil: el.repeatUntil.value,
       reminder: el.taskReminder.checked,
       notes: el.taskNotes.value.trim(),
-      photo: modalPhoto,
+      // The pending URL stands in for a newly picked photo, which has no
+      // reference yet -- without it, attaching one would not count as a change
+      // and the discard guard would let it go silently.
+      photo: modalPhotoPendingUrl || modalPhoto,
       subtasks: modalSubtasks.map((s) => ({ t: s.title, d: !!s.done })),
     });
   }
@@ -4355,7 +4845,7 @@
   el.modalOverlay.addEventListener("click", (e) => {
     if (e.target === el.modalOverlay) requestCloseModal();
   });
-  el.taskForm.addEventListener("submit", (e) => {
+  el.taskForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     // Strip the recognised tokens out of the saved title, but only if something
     // is actually left -- "tomorrow" alone should stay as the title rather than
@@ -4386,10 +4876,12 @@
       return;
     }
     const subtasks = modalSubtasks.map((s) => ({ id: s.id, title: s.title, done: !!s.done }));
-    const photo = modalPhoto;
-
-    if (editingTask) {
-      Object.assign(editingTask, { title, category, priority, time, endTime, reminder, notes, tag, repeat, repeatDays, repeatUntil, subtasks, startDate, photo });
+    const target = editingTask;
+    const photo = await commitModalPhoto(target ? target.photo : "");
+    // The store write above is async, so re-read the edit target rather than
+    // trusting a module-level variable that closeModal() may have since reset.
+    if (target) {
+      Object.assign(target, { title, category, priority, time, endTime, reminder, notes, tag, repeat, repeatDays, repeatUntil, subtasks, startDate, photo });
     } else {
       tasks.push({
         id: uid(),
@@ -4732,9 +5224,18 @@
   loadFilters();
   el.sortSelect.value = sortMode;
   populateMonthYearSelects();
+  renderCategorySelect();
   renderCategoryChips();
   renderPriorityChips();
   renderAll();
+
+  // Move any pre-IndexedDB inline photos out of localStorage, then reclaim
+  // blobs whose task is gone. Both run after the first paint -- neither is
+  // needed to draw the app, and blocking startup on disk work would be felt.
+  migrateInlinePhotos()
+    .then((moved) => { if (moved) renderAll(); })
+    .then(sweepOrphanPhotos)
+    .catch((e) => console.error("photo store startup failed", e));
 
   const splash = document.getElementById("splashScreen");
   if (splash) {
