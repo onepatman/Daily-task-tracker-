@@ -207,6 +207,7 @@
     weekView: document.getElementById("weekView"),
     timelineView: document.getElementById("timelineView"),
     boardView: document.getElementById("boardView"),
+    printSheet: document.getElementById("printSheet"),
     printSheetTitle: document.getElementById("printSheetTitle"),
     printPeriod: document.getElementById("printPeriod"),
     printClientWrap: document.getElementById("printClientWrap"),
@@ -219,6 +220,11 @@
     printSheetBody: document.getElementById("printSheetBody"),
     printPreparedName: document.getElementById("printPreparedName"),
     preparedByInput: document.getElementById("preparedByInput"),
+    printPreviewBackdrop: document.getElementById("printPreviewBackdrop"),
+    printPreviewBar: document.getElementById("printPreviewBar"),
+    printPreviewNote: document.getElementById("printPreviewNote"),
+    printPreviewPrint: document.getElementById("printPreviewPrint"),
+    printPreviewClose: document.getElementById("printPreviewClose"),
     taskList: document.getElementById("taskList"),
     emptyState: document.getElementById("emptyState"),
     addTaskBtn: document.getElementById("addTaskBtn"),
@@ -797,11 +803,12 @@
   }
   // Listed in paint order, topmost first, so Back and Escape always dismiss
   // whatever is actually on top. z-index: lightbox 95, more-menu 80,
-  // confirm 75, report/sync/day-detail 70, task modal 60.
+  // confirm 75, print preview 74/72, report/sync/day-detail 70, task modal 60.
   function closeTopmostOverlay() {
     if (!el.lightboxOverlay.hidden) { closeLightbox(); return true; }
     if (!el.moreMenu.hidden) { closeMoreMenu(); return true; }
     if (!el.confirmOverlay.hidden) { closeConfirm(); return true; }
+    if (!el.printPreviewBar.hidden) { closePrintPreview(); return true; }
     if (!el.reportOverlay.hidden) { closeReport(); return true; }
     if (!el.syncOverlay.hidden) { closeSyncOverlay(); return true; }
     if (!el.dayDetailOverlay.hidden) { closeDayDetail(); return true; }
@@ -977,7 +984,6 @@
     }
     el.selectModeBtn.hidden = view !== "day";
     if (view !== "day" && selectMode) setSelectMode(false);
-    updateViewStatusBadge();
     renderCurrentView();
   }
   el.viewTabs.querySelectorAll(".view-tab").forEach((tab) => {
@@ -1052,6 +1058,11 @@
       renderSheet();
       maybeShowSwipeHint();
     }
+    // The badge is refreshed here, in the same pass that draws the list, and
+    // nowhere else. It used to hang off updateSheetHeader(), which typing in
+    // the search box never calls -- so the count stayed frozen at whatever the
+    // last date change had computed while the list below it changed underneath.
+    updateViewStatusBadge();
   }
 
   // ---------- Month / year navigation ----------
@@ -1238,31 +1249,54 @@
     const dateObj = parseDateKey(selectedDate);
     const fullDateStr = `${FULL_DAY_NAMES[dateObj.getDay()]}, ${MONTHS[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
     el.sheetDateFull.textContent = fullDateStr;
-    updateViewStatusBadge();
   }
+  function filtersAreActive() {
+    return Boolean(searchQuery.trim()) || activeCategories.size > 0 || activePriorities.size > 0;
+  }
+  // The badge counts what is actually on screen. It used to count the day's
+  // whole list while the view showed the filtered one, so a search that matched
+  // nothing left an empty page still claiming "1/1 done today" -- which reads
+  // like the app lost the entry rather than like a filter hiding it.
   function updateViewStatusBadge() {
+    let done = 0, shown = 0, total = 0, unit = "done today";
     if (currentView === "week") {
+      unit = "done this week";
       const weekStart = getWeekStart(selectedDate);
-      let total = 0, done = 0;
       for (let i = 0; i < 7; i++) {
         const d = new Date(weekStart); d.setDate(d.getDate() + i);
         const key = toDateKey(d);
-        tasksForDate(key).forEach((t) => { total++; if (isDoneOn(t, key)) done++; });
+        total += tasksForDate(key).length;
+        getVisibleTasks(key).forEach((t) => { shown++; if (isDoneOn(t, key)) done++; });
       }
-      el.viewStatusBadge.textContent = `${done}/${total} done this week`;
     } else if (currentView === "board") {
-      const done = tasks.filter((t) => isDoneOn(t, t.startDate)).length;
-      el.viewStatusBadge.textContent = `${done}/${tasks.length} tasks done`;
+      unit = "tasks done";
+      total = tasks.length;
+      const list = getAllFilteredTasks();
+      shown = list.length;
+      done = list.filter((t) => isDoneOn(t, t.startDate)).length;
     } else if (currentView === "home") {
+      // Home has no filter toolbar and renders the unfiltered day, so its badge
+      // must not quietly answer for filters set on another tab.
       const todayKey = toDateKey(today);
       const list = tasksForDate(todayKey);
-      const done = list.filter((t) => isDoneOn(t, todayKey)).length;
-      el.viewStatusBadge.textContent = `${done}/${list.length} done today`;
+      total = shown = list.length;
+      done = list.filter((t) => isDoneOn(t, todayKey)).length;
+      el.viewStatusBadge.textContent = `${done}/${shown} ${unit}`;
+      el.viewStatusBadge.classList.remove("is-filtered");
+      el.viewStatusBadge.title = "";
+      return;
     } else {
-      const list = tasksForDate(selectedDate);
-      const done = list.filter((t) => isDoneOn(t, selectedDate)).length;
-      el.viewStatusBadge.textContent = `${done}/${list.length} done today`;
+      total = tasksForDate(selectedDate).length;
+      const list = getVisibleTasks(selectedDate);
+      shown = list.length;
+      done = list.filter((t) => isDoneOn(t, selectedDate)).length;
     }
+    const hiding = filtersAreActive() && shown < total;
+    el.viewStatusBadge.textContent = `${done}/${shown} ${unit}` + (hiding ? " · filtered" : "");
+    el.viewStatusBadge.classList.toggle("is-filtered", hiding);
+    el.viewStatusBadge.title = hiding
+      ? `${total - shown} more hidden by the search or filter chips`
+      : "";
   }
 
   // ---------- Inline subtask checklist (Day/Week views) ----------
@@ -3385,11 +3419,34 @@
     preparedBy = el.preparedByInput.value.trim();
     try { localStorage.setItem(PREPARED_BY_KEY, preparedBy); } catch (e) { /* name is a convenience; a full disk should not block typing */ }
   });
+  // Preview first. On Home/Day/Timeline the sheet is a whole month, which you
+  // could not see anywhere in the app before -- the views show one day at a
+  // time -- so it had to be printed to be read.
+  function openPrintPreview() {
+    buildPrintSheet();
+    const rows = el.printSheetBody.querySelectorAll("tr:not(.pc-day-group)").length;
+    const empty = el.printSheetBody.querySelector(".pc-empty");
+    el.printPreviewNote.textContent =
+      `${el.printSheetTitle.textContent} · ${el.printPeriod.textContent} · ` +
+      (empty ? "nothing to print" : `${rows} item${rows === 1 ? "" : "s"}`);
+    el.printPreviewBackdrop.hidden = false;
+    el.printPreviewBar.hidden = false;
+    document.body.classList.add("print-preview-open");
+    el.printSheet.scrollTop = 0;
+    pushOverlayState();
+  }
+  function closePrintPreview() {
+    document.body.classList.remove("print-preview-open");
+    el.printPreviewBackdrop.hidden = true;
+    el.printPreviewBar.hidden = true;
+  }
   el.menuPrint.addEventListener("click", () => {
     closeMoreMenu();
-    buildPrintSheet();
-    window.print();
+    openPrintPreview();
   });
+  el.printPreviewPrint.addEventListener("click", () => window.print());
+  el.printPreviewClose.addEventListener("click", closePrintPreview);
+  el.printPreviewBackdrop.addEventListener("click", closePrintPreview);
 
   // ---------- Export / Import ----------
   function downloadBlob(filename, content, mime) {
@@ -4677,7 +4734,6 @@
   populateMonthYearSelects();
   renderCategoryChips();
   renderPriorityChips();
-  updateViewStatusBadge();
   renderAll();
 
   const splash = document.getElementById("splashScreen");

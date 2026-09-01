@@ -334,6 +334,12 @@ html, body {
   border-radius: var(--radius-sm);
   white-space: nowrap;
 }
+/* Muted while a filter is narrowing the count, so the number is not read as
+   the day's real total. */
+.view-status-badge.is-filtered {
+  color: var(--text-muted);
+  border-style: dashed;
+}
 .select-mode-btn {
   flex-shrink: 0;
   display: flex;
@@ -2719,136 +2725,261 @@ html, body {
 /* ---------- Print sheet ----------
    A dedicated, purpose-built print document (not a printout of whatever
    on-screen view happens to be visible) -- built fresh from the current
-   view/date right before window.print() in buildPrintSheet(). Styled
+   view/date right before it is shown or printed, in buildPrintSheet(). Styled
    like a field inspection/task log: masthead, a bordered data table,
-   and sign-off lines, instead of just dumping app UI onto paper. */
-.print-sheet { display: none; }
+   and a sign-off line, instead of just dumping app UI onto paper.
+
+   The sheet's own look lives OUTSIDE @media print so the on-screen preview and
+   the paper output are literally the same rules -- a preview built from a
+   second set of styles would drift from what actually leaves the printer.
+   @media print only handles page-level concerns: hiding the app, undoing the
+   preview's framing, and pagination. */
+.print-sheet {
+  display: none;
+  color: #111;
+  background: #fff;
+  font-family: var(--font-sans);
+  /* Without this the grey column header and the day/project bands are dropped
+     by the browser's "background graphics off" default, and the sheet loses
+     the banding that separates its sections. */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.print-sheet-brand {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 2.5px solid #111;
+  padding-bottom: 9px;
+  margin-bottom: 12px;
+}
+.print-sheet-brand-name { font-weight: 800; font-size: 17px; letter-spacing: -0.005em; }
+.print-sheet-brand-tag {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #555;
+}
+.print-sheet-title {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: 0.01em;
+  color: #111;
+}
+.print-sheet-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 30px;
+  margin-bottom: 15px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid #999;
+}
+.print-sheet-meta div { display: flex; flex-direction: column; gap: 3px; }
+/* The flex rule above would otherwise re-show the hidden meta cells. */
+.print-sheet-meta div[hidden] { display: none; }
+.print-sheet-meta span {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: #666;
+}
+.print-sheet-meta strong { font-size: 12px; font-weight: 700; letter-spacing: 0.01em; }
+.print-sheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.print-sheet-table th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #222;
+  background: #e8ebef;
+  border: 1px solid #8a8a8a;
+  padding: 7px 8px;
+}
+.print-sheet-table td {
+  border: 1px solid #c4c4c4;
+  padding: 7px 8px;
+  vertical-align: top;
+}
+.pc-no { width: 32px; font-family: var(--font-mono); font-size: 10.5px; text-align: center; }
+.pc-date { width: 58px; font-family: var(--font-mono); font-size: 10px; white-space: nowrap; }
+.pc-cat, .pc-pri { width: 72px; font-size: 10.5px; }
+.pc-time { width: 92px; font-family: var(--font-mono); font-size: 10.5px; white-space: nowrap; }
+.pc-status { width: 62px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; text-align: center; }
+.pc-status-sub { margin-top: 2px; font-size: 9px; font-weight: 400; color: #555; }
+.pc-title { font-size: 11.5px; font-weight: 700; letter-spacing: -0.002em; }
+.pc-tag {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #555;
+}
+.pc-notes { margin-top: 4px; font-size: 10.5px; color: #444; }
+/* Steps sit under the note, indented behind a rule so a long task reads as
+   one block rather than running into the next row. */
+.pc-subs { margin-top: 5px; padding-left: 8px; border-left: 2px solid #c4c4c4; }
+.pc-subs-head {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #666;
+  margin-bottom: 3px;
+}
+.pc-sub { font-size: 10.5px; color: #222; line-height: 1.5; }
+.pc-sub-box { font-family: var(--font-mono); font-weight: 700; }
+.pc-sub.is-done { color: #555; }
+.pc-sub.is-done .pc-sub-box { color: #1a7a3c; }
+tr.pc-done .pc-status { color: #1a7a3c; }
+/* Strike the title only. Struck-through notes and a struck-through step list
+   are unreadable, and the point of printing them is to be read. */
+tr.pc-done .pc-title { color: #555; text-decoration: line-through; }
+tr.pc-day-group td {
+  background: #dde3ea;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  border: 1px solid #8a8a8a;
+  padding: 6px 8px;
+}
+.pc-group-meta { float: right; font-weight: 400; color: #333; letter-spacing: 0.05em; }
+.pc-empty { text-align: center; color: #777; padding: 18px 8px; }
+.print-sheet-footer { display: flex; margin-top: 44px; }
+.print-sign-block { width: 320px; display: flex; flex-direction: column; }
+/* Enough room above the rule to counter-sign by hand even when the name is
+   already printed there. */
+.print-sign-name { min-height: 26px; margin-top: 9px; font-size: 13px; font-weight: 700; }
+.print-sign-line { border-top: 1px solid #111; }
+.print-sign-label {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: #666;
+}
+
+/* ---------- Print preview (on screen) ----------
+   Shows the very sheet that is about to be printed, so a month's log can be
+   read through before any paper is used. The sheet element itself stays a
+   direct child of <body> -- the print rule that hides the app depends on that
+   -- so the preview frames it in place rather than moving it into a panel. */
+.print-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 12, 22, 0.72);
+  z-index: 71;
+}
+.print-preview-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  z-index: 74;
+}
+.print-preview-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.print-preview-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.print-preview-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+.print-preview-print {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.print-preview-print .icon { width: 15px; height: 15px; }
+.print-preview-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.print-preview-close .icon { width: 15px; height: 15px; }
+body.print-preview-open .print-sheet {
+  display: block;
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(8.5in, calc(100vw - 28px));
+  max-height: calc(100vh - 84px);
+  overflow-y: auto;
+  padding: 30px 34px 44px;
+  border-radius: 4px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  z-index: 72;
+}
+/* On a phone the sheet is wider than the screen. Panning a page that keeps its
+   real proportions reads far better than squeezing seven columns into 380px,
+   so only the table scrolls sideways and the masthead stays put. */
+.print-sheet-tablewrap { overflow-x: auto; }
+@media (max-width: 700px) {
+  .print-preview-title { display: none; }
+  body.print-preview-open .print-sheet { padding: 20px 16px 32px; top: 60px; }
+  body.print-preview-open .print-sheet-table { min-width: 620px; }
+}
+
 @media print {
   html, body { background: #fff; }
   body > *:not(.print-sheet) { display: none !important; }
-  .print-sheet {
+  /* Undo the preview framing: on paper the sheet is the page, not a card
+     floating in the middle of one. */
+  .print-sheet,
+  body.print-preview-open .print-sheet {
     display: block;
+    position: static;
+    transform: none;
+    width: auto;
     max-width: 100%;
+    max-height: none;
+    overflow: visible;
     margin: 0;
     padding: 0;
-    color: #111;
-    font-family: var(--font-sans);
-    /* Without this the grey column header and the day/project bands are
-       dropped by the browser's "background graphics off" default, and the
-       sheet loses the banding that separates its sections. */
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    border-radius: 0;
+    box-shadow: none;
   }
-  .print-sheet-brand {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    border-bottom: 2.5px solid #111;
-    padding-bottom: 9px;
-    margin-bottom: 12px;
-  }
-  .print-sheet-brand-name { font-weight: 800; font-size: 17px; letter-spacing: -0.005em; }
-  .print-sheet-brand-tag {
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: #555;
-  }
-  .print-sheet-title {
-    margin: 0 0 12px;
-    font-size: 18px;
-    font-weight: 700;
-    font-family: var(--font-mono);
-    letter-spacing: 0.01em;
-  }
-  .print-sheet-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 30px;
-    margin-bottom: 15px;
-    padding-bottom: 11px;
-    border-bottom: 1px solid #999;
-  }
-  .print-sheet-meta div { display: flex; flex-direction: column; gap: 3px; }
-  /* The flex rule above would otherwise re-show the hidden meta cells. */
-  .print-sheet-meta div[hidden] { display: none; }
-  .print-sheet-meta span {
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    letter-spacing: 0.11em;
-    text-transform: uppercase;
-    color: #666;
-  }
-  .print-sheet-meta strong { font-size: 12px; font-weight: 700; letter-spacing: 0.01em; }
-  .print-sheet-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 11px;
-    line-height: 1.45;
-  }
-  .print-sheet-table th {
-    text-align: left;
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #222;
-    background: #e8ebef;
-    border: 1px solid #8a8a8a;
-    padding: 7px 8px;
-  }
-  .print-sheet-table td {
-    border: 1px solid #c4c4c4;
-    padding: 7px 8px;
-    vertical-align: top;
-  }
-  .pc-no { width: 32px; font-family: var(--font-mono); font-size: 10.5px; text-align: center; }
-  .pc-date { width: 58px; font-family: var(--font-mono); font-size: 10px; white-space: nowrap; }
-  .pc-cat, .pc-pri { width: 72px; font-size: 10.5px; }
-  .pc-time { width: 92px; font-family: var(--font-mono); font-size: 10.5px; white-space: nowrap; }
-  .pc-status { width: 62px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; text-align: center; }
-  .pc-status-sub { margin-top: 2px; font-size: 9px; font-weight: 400; color: #555; }
-  .pc-title { font-size: 11.5px; font-weight: 700; letter-spacing: -0.002em; }
-  .pc-tag {
-    margin-top: 3px;
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #555;
-  }
-  .pc-notes { margin-top: 4px; font-size: 10.5px; color: #444; }
-  /* Steps sit under the note, indented behind a rule so a long task reads as
-     one block rather than running into the next row. */
-  .pc-subs { margin-top: 5px; padding-left: 8px; border-left: 2px solid #c4c4c4; }
-  .pc-subs-head {
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #666;
-    margin-bottom: 3px;
-  }
-  .pc-sub { font-size: 10.5px; color: #222; line-height: 1.5; }
-  .pc-sub-box { font-family: var(--font-mono); font-weight: 700; }
-  .pc-sub.is-done { color: #555; }
-  .pc-sub.is-done .pc-sub-box { color: #1a7a3c; }
-  tr.pc-done .pc-status { color: #1a7a3c; }
-  /* Strike the title only. Struck-through notes and a struck-through step list
-     are unreadable, and the point of printing them is to be read. */
-  tr.pc-done .pc-title { color: #555; text-decoration: line-through; }
-  tr.pc-day-group td {
-    background: #dde3ea;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.09em;
-    border: 1px solid #8a8a8a;
-    padding: 6px 8px;
-  }
-  .pc-group-meta { float: right; font-weight: 400; color: #333; letter-spacing: 0.05em; }
-  .pc-empty { text-align: center; color: #777; padding: 18px 8px; }
+
+  /* An overflow ancestor suppresses page-break handling for what it contains,
+     so the phone preview's scroll wrapper must be inert on paper. */
+  .print-sheet-tablewrap { overflow: visible; }
+  .print-sheet-table { min-width: 0; }
 
   /* ---- Pagination ----
      A day/project heading must never be the last thing on a page with its
@@ -2866,22 +2997,5 @@ html, body {
   }
   .print-sheet-table thead { display: table-header-group; }
   .print-sheet-table tbody { break-before: auto; }
-  .print-sheet-footer {
-    display: flex;
-    margin-top: 44px;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-  .print-sign-block { width: 320px; display: flex; flex-direction: column; }
-  /* Enough room above the rule to counter-sign by hand even when the name is
-     already printed there. */
-  .print-sign-name { min-height: 26px; margin-top: 9px; font-size: 13px; font-weight: 700; }
-  .print-sign-line { border-top: 1px solid #111; }
-  .print-sign-label {
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    letter-spacing: 0.11em;
-    text-transform: uppercase;
-    color: #666;
-  }
+  .print-sheet-footer { break-inside: avoid; page-break-inside: avoid; }
 }

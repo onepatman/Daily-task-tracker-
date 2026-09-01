@@ -90,7 +90,7 @@
             <button type="button" id="menuInstall"><span class="icon" data-icon="download"></span> Install app</button>
             <button type="button" id="menuSync"><span class="icon" data-icon="sync"></span> Sync across devices</button>
             <button type="button" id="menuWeeklyReview"><span class="icon" data-icon="barChart"></span> Weekly review</button>
-            <button type="button" id="menuPrint"><span class="icon" data-icon="printer"></span> Print sheet</button>
+            <button type="button" id="menuPrint"><span class="icon" data-icon="printer"></span> Print sheet…</button>
             <button type="button" id="menuExportIcs"><span class="icon" data-icon="calendar"></span> Export to Calendar (.ics)</button>
             <button type="button" id="menuExportJson"><span class="icon" data-icon="download"></span> Export JSON</button>
             <button type="button" id="menuExportCsv"><span class="icon" data-icon="download"></span> Export CSV</button>
@@ -263,6 +263,20 @@
   </div>
 </div>
 
+<div class="print-preview-backdrop" id="printPreviewBackdrop" hidden></div>
+<div class="print-preview-bar" id="printPreviewBar" hidden>
+  <span class="print-preview-title">Print preview</span>
+  <span class="print-preview-note" id="printPreviewNote"></span>
+  <div class="print-preview-actions">
+    <button type="button" class="print-preview-print" id="printPreviewPrint">
+      <span class="icon" data-icon="printer"></span> Print
+    </button>
+    <button type="button" class="print-preview-close" id="printPreviewClose" aria-label="Close preview">
+      <span class="icon" data-icon="close"></span>
+    </button>
+  </div>
+</div>
+
 <div class="print-sheet" id="printSheet">
   <div class="print-sheet-brand">
     <span class="print-sheet-brand-name">Daily Task Tracker &amp; Planner</span>
@@ -276,10 +290,12 @@
     <div><span>Generated</span><strong id="printGenerated">—</strong></div>
     <div><span>Completion</span><strong id="printCompletion">—</strong></div>
   </div>
-  <table class="print-sheet-table" id="printSheetTable">
-    <thead id="printSheetHead"></thead>
-    <tbody id="printSheetBody"></tbody>
-  </table>
+  <div class="print-sheet-tablewrap">
+    <table class="print-sheet-table" id="printSheetTable">
+      <thead id="printSheetHead"></thead>
+      <tbody id="printSheetBody"></tbody>
+    </table>
+  </div>
   <div class="print-sheet-footer">
     <div class="print-sign-block">
       <span class="print-sign-label">Prepared by</span>
