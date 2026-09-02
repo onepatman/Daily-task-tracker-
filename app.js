@@ -4329,6 +4329,7 @@
   });
 
   // ---------- Category manager ----------
+  const NEW_CATEGORY_OPTION = "__new_category__";
   function renderCategorySelect() {
     const current = el.taskCategory.value;
     el.taskCategory.innerHTML = "";
@@ -4338,10 +4339,37 @@
       opt.textContent = c.label;
       el.taskCategory.appendChild(opt);
     });
+    // The moment you need a category that does not exist yet is while you are
+    // filling in the task, and the manager is three taps away in the ⋮ menu.
+    // This makes it reachable from the field itself.
+    const add = document.createElement("option");
+    add.value = NEW_CATEGORY_OPTION;
+    add.textContent = "＋ New category…";
+    el.taskCategory.appendChild(add);
     // Keep the open form's choice if it still exists, so renaming a category
     // while the modal is behind this panel does not silently reassign the task.
     el.taskCategory.value = categoryExists(current) ? current : categories[0].key;
   }
+  // Which category the task form should adopt once one is added from inside it.
+  let adoptNewCategoryInModal = false;
+  // What the field held before "＋ New category…" was picked, so backing out of
+  // the panel restores the choice instead of dropping to the first category.
+  let lastRealCategory = "";
+  el.taskCategory.addEventListener("focus", () => {
+    if (el.taskCategory.value !== NEW_CATEGORY_OPTION) lastRealCategory = el.taskCategory.value;
+  });
+  el.taskCategory.addEventListener("change", () => {
+    if (el.taskCategory.value !== NEW_CATEGORY_OPTION) {
+      lastRealCategory = el.taskCategory.value;
+      return;
+    }
+    // Never leave the field sitting on the placeholder: put it back on a real
+    // category first, so cancelling out of the panel cannot save "＋ New…".
+    el.taskCategory.value = categoryExists(lastRealCategory) ? lastRealCategory : categories[0].key;
+    adoptNewCategoryInModal = true;
+    openCategories();
+    setTimeout(() => el.categoryNewName.focus(), 60);
+  });
   function categoryUsageCount(key) {
     return tasks.filter((t) => t.category === key).length;
   }
@@ -4448,6 +4476,7 @@
   }
   function closeCategories() {
     el.categoryOverlay.hidden = true;
+    adoptNewCategoryInModal = false;
   }
   el.menuCategories.addEventListener("click", () => { closeMoreMenu(); openCategories(); });
   el.closeCategories.addEventListener("click", closeCategories);
@@ -4471,6 +4500,15 @@
     renderCategoryList();
     renderCategorySelect();
     renderCategoryChips();
+    if (adoptNewCategoryInModal) {
+      // Came from the task form: pick the new one there and hand the form back
+      // rather than leaving the user to find their way out of the panel.
+      adoptNewCategoryInModal = false;
+      el.taskCategory.value = cat.key;
+      closeCategories();
+      showSnackbar(`"${label}" added and selected`);
+      return;
+    }
     showSnackbar(`"${label}" added`);
   });
 
