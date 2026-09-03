@@ -923,6 +923,9 @@ html, body {
 }
 .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .task-cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -930,6 +933,7 @@ html, body {
   border-radius: 999px;
   color: #fff;
 }
+.task-cat-chip .icon { width: 11px; height: 11px; flex: none; }
 .task-priority {
   display: flex;
   align-items: center;
@@ -2756,6 +2760,91 @@ body[data-view="month"] .tb-sheet-date { display: none; }
   body[data-view="month"] .app-body { grid-template-columns: 1fr; }
 }
 
+/* ---------- Streak heatmap (Insights) ---------- */
+.heatmap {
+  display: grid;
+  /* Columns are weeks, rows are weekdays -- the same reading order as the
+     calendar strip above it. */
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 1fr);
+  grid-auto-columns: 1fr;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.heat-cell {
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: var(--surface-2);
+}
+/* A day with nothing planned is not a miss, so it stays blank rather than
+   being shaded like a failure. */
+.heat-cell.empty { background: var(--surface-2); opacity: 0.45; }
+.heat-cell.lv1 { background: color-mix(in srgb, var(--red) 45%, var(--surface-2)); }
+.heat-cell.lv2 { background: color-mix(in srgb, var(--amber) 45%, var(--surface-2)); }
+.heat-cell.lv3 { background: color-mix(in srgb, var(--green) 45%, var(--surface-2)); }
+.heat-cell.lv4 { background: var(--green); }
+
+/* ---------- Backup nudge (Home) ---------- */
+.backup-nudge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+  background: color-mix(in srgb, var(--amber) 10%, var(--surface));
+}
+.backup-nudge-icon { flex: none; color: var(--amber); display: inline-flex; }
+.backup-nudge-icon .icon { width: 17px; height: 17px; }
+.backup-nudge-text { flex: 1; min-width: 0; font-size: 13px; line-height: 1.4; color: var(--text); }
+.backup-nudge-btn {
+  flex: none;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--amber);
+  background: transparent;
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.backup-nudge-x {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.backup-nudge-x .icon { width: 13px; height: 13px; }
+@media (max-width: 560px) {
+  .backup-nudge { flex-wrap: wrap; }
+  .backup-nudge-text { flex-basis: calc(100% - 60px); }
+  .backup-nudge-btn { margin-left: 27px; }
+}
+
+/* ---------- Workload hint (task form) ---------- */
+.workload-hint {
+  margin: -6px 0 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+.workload-hint.is-heavy {
+  border-color: color-mix(in srgb, var(--amber) 55%, var(--border));
+  background: color-mix(in srgb, var(--amber) 12%, var(--surface-2));
+  color: var(--text-soft);
+}
+
 /* ---------- Month view ----------
    The only place the whole month is visible at once. Chips take their colour
    from the client/project tag, falling back to the category colour when a task
@@ -2892,6 +2981,20 @@ body[data-view="month"] .tb-sheet-date { display: none; }
   border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
+.category-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+}
+.category-icon-btn .icon { width: 15px; height: 15px; }
+.category-icon-btn:hover { border-color: var(--accent); }
 .category-swatch {
   width: 26px;
   height: 26px;
