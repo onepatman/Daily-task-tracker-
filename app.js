@@ -301,6 +301,7 @@
     monthGrid: document.getElementById("monthGrid"),
     timelineView: document.getElementById("timelineView"),
     boardView: document.getElementById("boardView"),
+    boardGroupBar: document.getElementById("boardGroupBar"),
     printSheet: document.getElementById("printSheet"),
     printSheetTitle: document.getElementById("printSheetTitle"),
     printPeriod: document.getElementById("printPeriod"),
@@ -1410,6 +1411,7 @@
     const tabs = el.viewTabsRow.offsetHeight;
     const root = document.documentElement.style;
     root.setProperty("--topbar-offset", head + "px");
+    root.setProperty("--tabs-height", tabs + "px");
     root.setProperty("--sticky-stack", (head + tabs) + "px");
   }
   syncTopbarOffset();
@@ -1437,6 +1439,9 @@
     el.monthView.hidden = view !== "month";
     el.timelineView.hidden = view !== "timeline";
     el.boardView.hidden = view !== "board";
+    // The group bar belongs to Board; renderBoardView un-hides it again
+    // when there is more than one group to show.
+    if (view !== "board") el.boardGroupBar.hidden = true;
     el.toolbar.hidden = view === "home";
     // Lets CSS drop the sidebar's mini calendar in Month view, where a second
     // calendar next to the grid is redundant and costs it a third of its width.
@@ -3488,9 +3493,36 @@
     if (activePriorities.size) list = list.filter((t) => activePriorities.has(t.priority));
     return list;
   }
+  // ---------- Board grouping: collapse and jump ----------
+  // A project with thirty items pushes every project under it off the screen,
+  // so reaching the last one means scrolling past all the ones before it.
+  // Groups fold, and the fold is remembered: collapse the ones you are not
+  // working on and the board becomes an index you can read in one screen.
+  const BOARD_COLLAPSED_KEY = "dailyLog.boardCollapsed.v1";
+  let boardCollapsed = loadBoardCollapsed();
+  function loadBoardCollapsed() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(BOARD_COLLAPSED_KEY));
+      return new Set(Array.isArray(raw) ? raw : []);
+    } catch { return new Set(); }
+  }
+  function saveBoardCollapsed() {
+    try {
+      localStorage.setItem(BOARD_COLLAPSED_KEY, JSON.stringify([...boardCollapsed]));
+    } catch { /* a full quota must not stop the board from folding */ }
+  }
+  // The empty string is a real group key here ("No client / project"), so the
+  // stored form uses a sentinel rather than "" -- JSON round-trips it fine, but
+  // an empty key reads as "nothing stored" everywhere else in this file.
+  const NO_TAG_KEY = "__none__";
+  // Case-folded, so "Sullivan" and "sullivan" fold together the way anyone
+  // reading the board would expect them to.
+  const collapseKey = (tagKey) => (tagKey || "").trim().toLowerCase() || NO_TAG_KEY;
+
   function renderBoardView() {
     el.boardView.innerHTML = "";
     const list = getAllFilteredTasks();
+    renderBoardGroupBar();
     if (list.length === 0) {
       const empty = document.createElement("p");
       empty.className = "board-empty";
@@ -3516,12 +3548,125 @@
       el.boardView.appendChild(buildBoardGroup(tagKey || "No client / project", groupTasks, tagKey));
     });
   }
-  function buildBoardGroup(title, groupTasks, tagKey) {
-    const section = document.createElement("div");
-    section.className = "board-group";
 
-    const head = document.createElement("div");
+  // Every project on one line, with what is still open in each, above a board
+  // that may be thousands of pixels long. Built from the unfiltered set on
+  // purpose: filtered to one project it would collapse to that project alone,
+  // and there would be no way back to the others from it.
+  function renderBoardGroupBar() {
+    const groups = new Map();
+    tasks.forEach((t) => {
+      const tag = (t.tag || "").trim();
+      const k = collapseKey(tag);
+      const slot = groups.get(k) || { label: tag || "No client / project", tag, open: 0, total: 0 };
+      slot.total++;
+      if (!isDoneOn(t, t.startDate)) slot.open++;
+      groups.set(k, slot);
+    });
+    const rows = [...groups.values()].sort((a, b) => {
+      if (!a.tag !== !b.tag) return a.tag ? -1 : 1;      // untagged last
+      return b.open - a.open || a.label.localeCompare(b.label);
+    });
+    el.boardGroupBar.innerHTML = "";
+    el.boardGroupBar.hidden = rows.length < 2;
+    if (rows.length < 2) return;
+
+    const caption = document.createElement("span");
+    caption.className = "board-bar-caption";
+    caption.textContent = "GROUPS";
+    el.boardGroupBar.appendChild(caption);
+
+    const searching = el.searchInput.value.trim();
+    const allBtn = document.createElement("button");
+    allBtn.type = "button";
+    allBtn.className = "board-bar-chip all" + (searching ? "" : " active");
+    allBtn.textContent = "All";
+    allBtn.addEventListener("click", () => {
+      if (!searching) return;
+      el.searchInput.value = "";
+      searchQuery = "";
+      renderCurrentView();
+    });
+    el.boardGroupBar.appendChild(allBtn);
+
+    rows.forEach((row) => {
+      // Untagged work has no name to search for, so its chip jumps to the group
+      // instead of filtering to it.
+      const active = !!row.tag && searching.toLowerCase() === row.tag.toLowerCase();
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "board-bar-chip" + (active ? " active" : "") + (row.tag ? "" : " untagged");
+      if (row.tag) applyTagColor(btn, row.tag);
+      btn.title = row.tag
+        ? (active ? `Showing only ${row.label} — click to clear` : `Show only ${row.label}`)
+        : "Jump to the ungrouped items";
+      const dot = document.createElement("span");
+      dot.className = "board-bar-dot";
+      btn.appendChild(dot);
+      btn.appendChild(document.createTextNode(row.label));
+      const n = document.createElement("span");
+      n.className = "board-bar-count";
+      n.textContent = row.open ? `${row.open} left` : "done";
+      if (!row.open) n.classList.add("good");
+      btn.appendChild(n);
+      btn.addEventListener("click", () => {
+        if (!row.tag) {
+          const section = el.boardView.querySelector('.board-group[data-group-key="' + NO_TAG_KEY + '"]');
+          if (section) {
+            boardCollapsed.delete(NO_TAG_KEY);
+            saveBoardCollapsed();
+            renderBoardView();
+            el.boardView.querySelector('.board-group[data-group-key="' + NO_TAG_KEY + '"]')
+              .scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+          return;
+        }
+        el.searchInput.value = active ? "" : row.tag;
+        searchQuery = el.searchInput.value;
+        renderCurrentView();
+      });
+      el.boardGroupBar.appendChild(btn);
+    });
+
+    // One control for the whole board: fold everything down to its headings,
+    // which is the fastest way to see what projects there are at all.
+    const anyOpen = rows.some((r) => !boardCollapsed.has(collapseKey(r.tag)));
+    const fold = document.createElement("button");
+    fold.type = "button";
+    fold.className = "board-bar-fold";
+    fold.textContent = anyOpen ? "Collapse all" : "Expand all";
+    fold.addEventListener("click", () => {
+      if (anyOpen) rows.forEach((r) => boardCollapsed.add(collapseKey(r.tag)));
+      else boardCollapsed.clear();
+      saveBoardCollapsed();
+      renderBoardView();
+    });
+    el.boardGroupBar.appendChild(fold);
+  }
+  function buildBoardGroup(title, groupTasks, tagKey) {
+    const key = collapseKey(tagKey);
+    const collapsed = boardCollapsed.has(key);
+    const section = document.createElement("div");
+    section.className = "board-group" + (collapsed ? " collapsed" : "");
+    section.dataset.groupKey = key;
+
+    // The whole heading is the control, not a small chevron beside it: on a
+    // phone the heading is the only comfortable target in the row.
+    const head = document.createElement("button");
+    head.type = "button";
     head.className = "board-group-head";
+    head.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    head.title = collapsed ? `Show the ${groupTasks.length} items` : "Fold this group away";
+    const caret = document.createElement("span");
+    caret.className = "board-group-caret";
+    caret.textContent = collapsed ? "▸" : "▾";
+    head.appendChild(caret);
+    head.addEventListener("click", () => {
+      if (boardCollapsed.has(key)) boardCollapsed.delete(key);
+      else boardCollapsed.add(key);
+      saveBoardCollapsed();
+      renderBoardView();
+    });
     const ttl = document.createElement("span");
     ttl.className = "board-group-title";
     if (tagKey) {
@@ -3577,10 +3722,16 @@
     if (!open.length) addStat("all done", "good");
     section.appendChild(meta);
 
-    const list = document.createElement("div");
-    list.className = "board-group-tasks";
-    groupTasks.forEach((t) => list.appendChild(buildBoardTaskRow(t)));
-    section.appendChild(list);
+    // Folded, the heading, the bar and the rollup line all stay: a collapsed
+    // board is meant to be an index you can read, not a row of bare names.
+    // Only the items themselves go, and they are not built at all -- on a board
+    // of several hundred rows that is most of the render.
+    if (!collapsed) {
+      const list = document.createElement("div");
+      list.className = "board-group-tasks";
+      groupTasks.forEach((t) => list.appendChild(buildBoardTaskRow(t)));
+      section.appendChild(list);
+    }
 
     return section;
   }

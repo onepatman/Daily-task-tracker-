@@ -2120,14 +2120,130 @@ html, body {
   box-shadow: var(--shadow-sm);
   padding: 12px;
 }
+/* A button now: the whole heading folds the group away. Styled to keep looking
+   like a heading rather than a control -- it is one on every row of the
+   board, and seven buttons down the page would shout. */
 .board-group-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 6px;
+  width: 100%;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
 }
+.board-group-head:hover .board-group-title { color: var(--accent); }
+.board-group-caret {
+  flex-shrink: 0;
+  margin-right: -2px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.board-group-head:hover .board-group-caret { color: var(--accent); }
+/* Folded: the heading, the progress bar and the rollup line stay, so the board
+   reads as an index of projects rather than a list of bare names. */
+.board-group.collapsed { padding-bottom: 10px; }
+
+/* ---------- Board group bar ---------- */
+/* Sticky, because it exists to get you to a group at the far end of a board
+   that runs to thousands of pixels -- scrolling to find the thing that saves
+   you scrolling would be a poor joke. It parks under whatever is already
+   stuck: the tabs row alone on a phone, the title block and the tabs on a
+   desktop. */
+.board-group-bar {
+  position: sticky;
+  top: var(--tabs-height, 0px);
+  z-index: 19;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  /* The horizontal padding matches the board's own inset, so the chips line up
+     with the group cards below rather than sitting a little to their left. */
+  padding: 8px 12px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+}
+@media (min-width: 900px) {
+  .board-group-bar { top: var(--sticky-stack, 0px); }
+}
+.board-bar-caption {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-right: 2px;
+}
+.board-bar-chip {
+  --tag-hue: 210;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px 5px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, hsl(var(--tag-hue) 60% 50%) 40%, transparent);
+  background: color-mix(in srgb, hsl(var(--tag-hue) 60% 50%) 10%, var(--surface));
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.board-bar-chip:hover { border-color: hsl(var(--tag-hue) 60% 50%); }
+.board-bar-chip.active {
+  border-color: hsl(var(--tag-hue) 60% 50%);
+  background: color-mix(in srgb, hsl(var(--tag-hue) 60% 50%) 26%, var(--surface));
+  font-weight: 700;
+}
+.board-bar-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: hsl(var(--tag-hue) 60% 50%);
+  flex: none;
+}
+.board-bar-chip.untagged { --tag-hue: 210; }
+.board-bar-chip.untagged .board-bar-dot { background: var(--text-faint); }
+.board-bar-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); }
+.board-bar-count.good { color: var(--green, #3ecf8e); }
+.board-bar-chip.active .board-bar-count { color: inherit; }
+/* All carries no project colour of its own, so it takes the accent -- matching
+   the All in the Category and Priority rows above. */
+.board-bar-chip.all { padding-left: 11px; }
+.board-bar-chip.all.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.board-bar-fold {
+  margin-left: auto;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.board-bar-fold:hover { border-color: var(--accent); }
 .board-group-title {
+  /* Holds the title against the caret on the left. Without it the heading's
+     space-between spreads three children instead of two and the project name
+     drifts into the middle of the row. */
+  margin-right: auto;
   font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 700;
