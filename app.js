@@ -752,11 +752,118 @@
     d.setDate(d.getDate() + n);
     return toDateKey(d);
   }
+  // "sept" is spelled out often enough to be worth accepting alongside "sep".
+  // Sorted longest-first so "september" is not eaten by "sep" leaving a stray
+  // "tember" in the title.
+  const QA_MONTH_WORDS = MONTHS.map((m) => m.toLowerCase())
+    .concat(MONTHS.map((m) => m.slice(0, 3).toLowerCase()))
+    .concat(["sept"])
+    .sort((a, b) => b.length - a.length);
+  const QA_MONTH_ALT = QA_MONTH_WORDS.join("|");
+  function qaMonthIndex(word) {
+    const head = word.toLowerCase().slice(0, 3);
+    return MONTHS.findIndex((m) => m.toLowerCase().startsWith(head));
+  }
+  // A bare month and day carries no year, so it resolves to the first such date
+  // that is not already behind us -- "dec 28" typed in January means this
+  // December, but the end of "dec 28 - jan 3" means the January after it, which
+  // is why the floor is a parameter rather than always today.
+  function qaMonthDayKey(monthIdx, day, notBefore) {
+    const floor = notBefore || toDateKey(today);
+    let d = new Date(parseDateKey(floor).getFullYear(), monthIdx, day);
+    if (toDateKey(d) < floor) d = new Date(d.getFullYear() + 1, monthIdx, day);
+    return toDateKey(d);
+  }
+  function qaShiftFrom(dateKey, n) {
+    const d = parseDateKey(dateKey);
+    d.setDate(d.getDate() + n);
+    return toDateKey(d);
+  }
+  // The next given weekday on or after a date. Used for the right-hand side of
+  // "mon to fri": the Friday meant is the one that closes that week, not the
+  // one that may already have passed.
+  function qaDowOnOrAfter(dateKey, targetDow) {
+    const d = parseDateKey(dateKey);
+    return qaShiftFrom(dateKey, (targetDow - d.getDay() + 7) % 7);
+  }
   function qaTo24h(hour, minute, meridiem) {
     let h = hour % 12;
     if (meridiem === "pm") h += 12;
     if (!meridiem) h = hour % 24;         // bare 14:00 stays as typed
     return `${String(h).padStart(2, "0")}:${String(minute || 0).padStart(2, "0")}`;
+  }
+
+  const QA_DOW_ALT = FULL_DAY_NAMES.concat(DAY_NAMES)
+    .map((d) => d.toLowerCase())
+    .sort((a, b) => b.length - a.length)
+    .join("|");
+  // One date expression, anchored at the start of the text it is handed, so a
+  // range can be read as "<expr> to <expr>" instead of needing a separate
+  // regex for every pairing of the shapes below. `floor` is the earliest the
+  // answer may be, which is how the right-hand side of a range lands after the
+  // left rather than in the past.
+  function qaDateAt(text, floor) {
+    let m;
+    if ((m = text.match(/^today\b/i))) return { key: qaShiftDays(0), len: m[0].length };
+    if ((m = text.match(/^(tomorrow|tmr|tmrw)\b/i))) return { key: qaShiftDays(1), len: m[0].length };
+    if ((m = text.match(new RegExp(`^(${QA_MONTH_ALT})\\.?\\s*(\\d{1,2})\\b`, "i"))))
+      return { key: qaMonthDayKey(qaMonthIndex(m[1]), +m[2], floor), len: m[0].length, month: true };
+    if ((m = text.match(new RegExp(`^(\\d{1,2})\\s+(${QA_MONTH_ALT})\\b`, "i"))))
+      return { key: qaMonthDayKey(qaMonthIndex(m[2]), +m[1], floor), len: m[0].length, month: true };
+    if ((m = text.match(/^(\d{1,2})\/(\d{1,2})\b/)))
+      return { key: qaMonthDayKey(+m[1] - 1, +m[2], floor), len: m[0].length };
+    if ((m = text.match(new RegExp(`^(next\\s+)?(${QA_DOW_ALT})\\b`, "i")))) {
+      const dow = FULL_DAY_NAMES.findIndex((d) => d.toLowerCase().startsWith(m[2].toLowerCase().slice(0, 3)));
+      // On the right of a range, "mon to fri" means the Friday that closes that
+      // same week -- so it counts forward from the day after the left side,
+      // never landing back on it.
+      const key = floor ? qaDowOnOrAfter(qaShiftFrom(floor, 1), dow) : qaNextWeekday(dow, !!m[1]);
+      return { key, len: m[0].length };
+    }
+    return null;
+  }
+  const QA_RANGE_SEP = /^\s*(?:-|–|—|to|until|till|thru|through)\s*/i;
+  // Scans for "<date> to <date>" anywhere in the line. Both sides must be a
+  // real date expression -- a month name, a weekday, today/tomorrow or a slash
+  // date -- with the one exception of a bare day number on the right, which
+  // borrows the month from the left so "sep 3-7" reads the way it is said. A
+  // bare number is never accepted on the left: "9-11am" is a time, and "punch
+  // list 2 to 5" is a title.
+  function qaFindDateRange(text) {
+    for (let i = 0; i < text.length; i++) {
+      if (i > 0 && /[\w#@/]/.test(text[i - 1])) continue;
+      const left = qaDateAt(text.slice(i));
+      if (!left) continue;
+      let rest = text.slice(i + left.len);
+      const sepM = rest.match(QA_RANGE_SEP);
+      if (!sepM) continue;
+      rest = rest.slice(sepM[0].length);
+      // "sep 3 to 7pm" and "sep 3-7:30" are a time of day on a single date, not
+      // a run of days. The date on the left is still real, so it is claimed
+      // here along with the separator -- otherwise the time rule below would
+      // read "3 to 7pm" as a 3pm-to-7pm range and leave a stray "sep" in the
+      // title.
+      if (/^\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i.test(rest) || /^\d{1,2}:\d{2}/.test(rest)) {
+        return { startDate: left.key, endDate: "", from: i, to: i + left.len + sepM[0].length };
+      }
+      let right = qaDateAt(rest, left.key);
+      let rightLen = right ? right.len : 0;
+      if (!right && left.month) {
+        const bare = rest.match(/^(\d{1,2})\b/);
+        if (bare) {
+          right = { key: qaMonthDayKey(parseDateKey(left.key).getMonth(), +bare[1], left.key) };
+          rightLen = bare[0].length;
+        }
+      }
+      if (!right) continue;
+      return {
+        startDate: left.key,
+        endDate: right.key,
+        from: i,
+        to: i + left.len + sepM[0].length + rightLen,
+      };
+    }
+    return null;
   }
 
   function parseQuickAdd(raw) {
@@ -824,6 +931,25 @@
       found.repeat = "monthly"; cut(/\b(every\s+month|monthly)\b/i);
     }
 
+    // "for 5 days" / "for 2 weeks" -- a length rather than an end date, so it
+    // is resolved once the start is known, further down.
+    const durM = text.match(/\bfor\s+(\d{1,3})\s*(days?|weeks?|wks?)\b/i);
+    if (durM) {
+      const n = Math.min(Number(durM[1]), 365);
+      found.spanDays = /^w/i.test(durM[2]) ? n * 7 : n;
+      cut(new RegExp(`\\bfor\\s+${durM[1]}\\s*${durM[2]}\\b`, "i"));
+    }
+
+    // A date range claims its text before the time and single-date rules below,
+    // both of which would otherwise take half of it: "sep 3-7" would read as
+    // the 3rd, with a stray "-7" left in the title.
+    const rangeD = found.repeat ? null : qaFindDateRange(text);
+    if (rangeD) {
+      found.startDate = rangeD.startDate;
+      if (rangeD.endDate && rangeD.endDate > rangeD.startDate) found.endDate = rangeD.endDate;
+      text = text.slice(0, rangeD.from) + " " + text.slice(rangeD.to);
+    }
+
     // Time, including ranges, before dates so "9-11am" isn't read as a day number.
     const RANGE = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i;
     const rangeM = text.match(RANGE);
@@ -839,26 +965,24 @@
       else if (t24) { found.time = qaTo24h(+t24[1], +t24[2], null); cut(/\b([01]?\d|2[0-3]):[0-5]\d\b/); }
     }
 
-    if (/\btoday\b/i.test(text)) { found.startDate = qaShiftDays(0); cut(/\btoday\b/i); }
+    if (found.startDate) { /* already settled by the range above */ }
+    else if (/\btoday\b/i.test(text)) { found.startDate = qaShiftDays(0); cut(/\btoday\b/i); }
     else if (/\b(tomorrow|tmr|tmrw)\b/i.test(text)) { found.startDate = qaShiftDays(1); cut(/\b(tomorrow|tmr|tmrw)\b/i); }
     else {
       const inDays = text.match(/\bin\s+(\d{1,3})\s+days?\b/i);
       const nextDow = text.match(new RegExp(`\\b(next\\s+)?(${FULL_DAY_NAMES.map((d) => d.toLowerCase()).join("|")}|${DAY_NAMES.map((d) => d.toLowerCase()).join("|")})\\b`, "i"));
-      const monthName = MONTHS.map((m) => m.toLowerCase()).join("|");
-      const mdM = text.match(new RegExp(`\\b(${monthName}|${MONTHS.map((m) => m.slice(0, 3).toLowerCase()).join("|")})\\.?\\s+(\\d{1,2})\\b`, "i"));
-      const dmM = text.match(new RegExp(`\\b(\\d{1,2})\\s+(${monthName}|${MONTHS.map((m) => m.slice(0, 3).toLowerCase()).join("|")})\\b`, "i"));
+      const mdM = text.match(new RegExp(`\\b(${QA_MONTH_ALT})\\.?\\s+(\\d{1,2})\\b`, "i"));
+      const dmM = text.match(new RegExp(`\\b(\\d{1,2})\\s+(${QA_MONTH_ALT})\\b`, "i"));
       const slashM = text.match(/\b(\d{1,2})\/(\d{1,2})\b/);
 
       if (inDays) { found.startDate = qaShiftDays(+inDays[1]); cut(/\bin\s+\d{1,3}\s+days?\b/i); }
       else if (mdM || dmM) {
-        const nameRaw = (mdM ? mdM[1] : dmM[2]).toUpperCase();
-        const day = +(mdM ? mdM[2] : dmM[1]);
-        const idx = MONTHS.findIndex((m) => m.startsWith(nameRaw.slice(0, 3)));
-        // A month/day already past this year means they mean next year.
-        const y = today.getFullYear();
-        let d = new Date(y, idx, day);
-        if (toDateKey(d) < toDateKey(today)) d = new Date(y + 1, idx, day);
-        found.startDate = toDateKey(d);
+        // A month/day already past this year means they mean next year, which
+        // is what qaMonthDayKey does with no floor of its own.
+        found.startDate = qaMonthDayKey(
+          qaMonthIndex(mdM ? mdM[1] : dmM[2]),
+          +(mdM ? mdM[2] : dmM[1])
+        );
         cut(mdM ? new RegExp(`\\b${mdM[1]}\\.?\\s+${mdM[2]}\\b`, "i") : new RegExp(`\\b${dmM[1]}\\s+${dmM[2]}\\b`, "i"));
       } else if (nextDow) {
         const word = nextDow[2].toUpperCase();
@@ -872,6 +996,13 @@
         found.startDate = toDateKey(d);
         cut(/\b\d{1,2}\/\d{1,2}\b/);
       }
+    }
+
+    // A run and a repeat are mutually exclusive in the form, so they are here
+    // too: whichever was typed as a repeat wins, and the length is dropped.
+    if (found.repeat) { delete found.endDate; delete found.spanDays; }
+    else if (found.spanDays > 1 && !found.endDate && found.startDate) {
+      found.endDate = qaShiftFrom(found.startDate, found.spanDays - 1);
     }
 
     found.title = text.replace(/\s{2,}/g, " ").trim();
@@ -4404,7 +4535,13 @@
     el.spanHint.textContent = `${formatDateDisplay(start)} → ${formatDateDisplay(end)} · ${days} days, one tick to finish.`;
     el.spanHint.hidden = false;
   }
-  el.taskSpans.addEventListener("change", () => { renderSpanFields(); renderWorkloadHint(); });
+  el.taskSpans.addEventListener("change", () => {
+    // Touching the box by hand takes it off the parser, so a later keystroke
+    // in the title cannot undo a deliberate choice.
+    quickSpanApplied = false;
+    renderSpanFields();
+    renderWorkloadHint();
+  });
   el.taskEndDateBtn.addEventListener("click", () => {
     if (el.datePickerPopover.hidden || dpTarget !== DP_TARGETS.taskEndDate) openDatePicker(DP_TARGETS.taskEndDate);
     else closeDatePicker();
@@ -4460,7 +4597,7 @@
       get display() { return el.taskEndDateDisplay; },
       get btn() { return el.taskEndDateBtn; },
       get anchor() { return el.spanUntilRow; },
-      onPick: () => renderSpanFields(),
+      onPick: () => { quickSpanApplied = false; renderSpanFields(); },
     },
     repeatUntil: {
       get input() { return el.repeatUntil; },
@@ -5299,9 +5436,16 @@
   // chips. Only in create mode -- rewriting an existing task's date because its
   // title happens to contain "Monday" would be a nasty surprise.
   let quickParsed = null;
+  // Whether the run currently showing was put there by the parser rather than
+  // ticked by hand. Every other parsed field is left standing once set, but a
+  // run has to be taken back: "sep 3-7" is a five-day run until the next two
+  // keystrokes make it "sep 3-7pm", and leaving the box ticked would silently
+  // save a run nobody asked for.
+  let quickSpanApplied = false;
 
   function clearQuickParse() {
     quickParsed = null;
+    quickSpanApplied = false;
     el.quickParse.hidden = true;
     el.quickParseChips.innerHTML = "";
   }
@@ -5344,6 +5488,31 @@
       if (p.repeatEvery) el.repeatEvery.value = String(p.repeatEvery);
       syncRepeatFields();
       hits.push({ label: repeatLabel({ repeat: p.repeat, repeatDays: p.repeatDays, repeatEvery: p.repeatEvery }), tone: "" });
+    }
+    // The run goes in after the repeat, not before: the two are mutually
+    // exclusive, and syncRepeatFields() above clears the run whenever a repeat
+    // is set. A length with no date of its own ("for 5 days") counts from
+    // whatever the date field is holding.
+    if (p.repeat) {
+      quickSpanApplied = false;                 // syncRepeatFields cleared it
+    } else {
+      const spanStart = p.startDate || el.taskDate.value || selectedDate;
+      const spanEnd = p.endDate || (p.spanDays > 1 ? qaShiftFrom(spanStart, p.spanDays - 1) : "");
+      if (spanEnd && spanEnd > spanStart) {
+        el.taskSpans.checked = true;
+        el.taskEndDate.value = spanEnd;
+        renderSpanFields();
+        quickSpanApplied = true;
+        const days = spanDayCount({ startDate: spanStart, endDate: spanEnd });
+        hits.push({ label: `→ ${formatDateDisplay(spanEnd).replace(/,\s*\d{4}$/, "")} · ${days} days`, tone: "" });
+      } else if (quickSpanApplied) {
+        // Only what the parser itself put there is taken back -- a box the
+        // user ticked by hand is left alone.
+        quickSpanApplied = false;
+        el.taskSpans.checked = false;
+        el.taskEndDate.value = "";
+        renderSpanFields();
+      }
     }
 
     renderWorkloadHint();
