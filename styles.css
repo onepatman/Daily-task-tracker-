@@ -2758,6 +2758,43 @@ body[data-view="month"] .tb-sheet-date { display: none; }
    override has to be repeated at each breakpoint that sets two columns. */
 @media (min-width: 900px) {
   body[data-view="month"] .app-body { grid-template-columns: 1fr; }
+
+  /* On desktop the tabs row is static because the sidebar is sticky and two
+     sticky headers would fight for the same space. That reasoning does not
+     survive into Month view, which hides the sidebar: nothing stayed put, so
+     scrolling down a six-week grid took the month arrows, the year, Jump to
+     today and the ⋮ menu away with it, and changing month meant scrolling all
+     the way back up. Here the title block and the tabs take the sidebar's
+     place as the thing that holds still.
+
+     z-index matters as much as the stickiness: the grid's chips are
+     positioned (they carry the resize grips), and a sticky header with no
+     stacking order of its own comes earlier in the document, so the chips
+     would scroll straight over the top of it. */
+  body[data-view="month"] .titleblock {
+    position: sticky;
+    top: 0;
+    z-index: 21;
+    /* Opaque. The gradient alone lets the grid show through as it passes. */
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), var(--bg);
+  }
+  body[data-view="month"] .view-tabs-row {
+    position: sticky;
+    /* Sits directly under the title block, whose height is measured at
+       runtime -- it changes with the text-size setting, the sync pill and the
+       wide breakpoints, so it cannot be a constant here. */
+    top: var(--topbar-offset, 0px);
+    z-index: 20;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border-soft);
+    /* The desktop rule caps this row at 600px so the six tabs sit on one line
+       and nothing stretches. A capped box is fine while the row scrolls with
+       the page, but as a sticky bar it has to occlude what passes underneath,
+       and 600px of an 1100px window leaves the calendar sliding through the
+       gap beside the tabs. Full width instead -- which also puts the count
+       badge back on the tabs' own line rather than wrapping it below. */
+    max-width: none;
+  }
 }
 
 /* ---------- Multi-day run (task form) ---------- */

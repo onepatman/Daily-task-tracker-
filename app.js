@@ -241,6 +241,7 @@
     menuImport: document.getElementById("menuImport"),
     importFileInput: document.getElementById("importFileInput"),
     viewTabs: document.getElementById("viewTabs"),
+    titleblock: document.querySelector(".titleblock"),
     selectModeBtn: document.getElementById("selectModeBtn"),
     bulkBar: document.getElementById("bulkBar"),
     bulkBarCount: document.getElementById("bulkBarCount"),
@@ -1396,6 +1397,23 @@
     if (!el.datePickerPopover.hidden && !path.includes(el.taskDateBtn) && !path.includes(el.repeatUntilBtn) && !path.includes(el.datePickerPopover)) closeDatePicker();
     if (!el.timePickerPopover.hidden && !path.includes(el.taskTimeBtn) && !path.includes(el.taskEndTimeBtn) && !path.includes(el.timePickerPopover)) closeTimePicker();
   });
+
+  // The tabs row sticks directly beneath the title block in Month view, so it
+  // needs that block's height as its own offset. Measured rather than written
+  // into the stylesheet as a number: the block grows when the sync pill
+  // appears, when the text-size setting is raised, and at the wide
+  // breakpoints, and a stale constant would leave a gap or a covered row.
+  function syncTopbarOffset() {
+    document.documentElement.style.setProperty(
+      "--topbar-offset", el.titleblock.offsetHeight + "px");
+  }
+  syncTopbarOffset();
+  if (window.ResizeObserver) {
+    // Catches every cause at once, including the ones no event would report.
+    new ResizeObserver(syncTopbarOffset).observe(el.titleblock);
+  } else {
+    window.addEventListener("resize", syncTopbarOffset);
+  }
 
   // ---------- View tabs (Day / Week / Timeline) ----------
   function setView(view) {
