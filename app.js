@@ -268,6 +268,9 @@
     homeUpcomingList: document.getElementById("homeUpcomingList"),
     dayView: document.getElementById("dayView"),
     weekView: document.getElementById("weekView"),
+    monthView: document.getElementById("monthView"),
+    monthWeekdays: document.getElementById("monthWeekdays"),
+    monthGrid: document.getElementById("monthGrid"),
     timelineView: document.getElementById("timelineView"),
     boardView: document.getElementById("boardView"),
     printSheet: document.getElementById("printSheet"),
@@ -1225,11 +1228,17 @@
     el.homeView.hidden = view !== "home";
     el.dayView.hidden = view !== "day";
     el.weekView.hidden = view !== "week";
+    el.monthView.hidden = view !== "month";
     el.timelineView.hidden = view !== "timeline";
     el.boardView.hidden = view !== "board";
     el.toolbar.hidden = view === "home";
+    // Lets CSS drop the sidebar's mini calendar in Month view, where a second
+    // calendar next to the grid is redundant and costs it a third of its width.
+    document.body.dataset.view = view;
     if (changed) {
-      const activeEl = view === "home" ? el.homeView : view === "day" ? el.dayView : view === "week" ? el.weekView : view === "timeline" ? el.timelineView : el.boardView;
+      const activeEl = view === "home" ? el.homeView : view === "day" ? el.dayView
+        : view === "week" ? el.weekView : view === "month" ? el.monthView
+        : view === "timeline" ? el.timelineView : el.boardView;
       activeEl.classList.remove("view-entering");
       void activeEl.offsetWidth; // restart the animation even if it's still playing
       activeEl.classList.add("view-entering");
@@ -1304,6 +1313,7 @@
   function renderCurrentView() {
     if (currentView === "home") renderHomeView();
     else if (currentView === "week") renderWeekView();
+    else if (currentView === "month") renderMonthView();
     else if (currentView === "timeline") renderTimelineView();
     else if (currentView === "board") renderBoardView();
     else {
@@ -1517,6 +1527,15 @@
       for (let i = 0; i < 7; i++) {
         const d = new Date(weekStart); d.setDate(d.getDate() + i);
         const key = toDateKey(d);
+        total += tasksForDate(key).length;
+        getVisibleTasks(key).forEach((t) => { shown++; if (isDoneOn(t, key)) done++; });
+      }
+    } else if (currentView === "month") {
+      unit = "done this month";
+      const sel = parseDateKey(selectedDate);
+      const days = new Date(sel.getFullYear(), sel.getMonth() + 1, 0).getDate();
+      for (let d = 1; d <= days; d++) {
+        const key = toDateKey(new Date(sel.getFullYear(), sel.getMonth(), d));
         total += tasksForDate(key).length;
         getVisibleTasks(key).forEach((t) => { shown++; if (isDoneOn(t, key)) done++; });
       }
@@ -1994,6 +2013,110 @@
     setDoneOn(t, dateKey, newDone);
     saveTasks();
     renderAll();
+  }
+
+  // ---------- Month view ----------
+  // A whole month at once, which nothing in the app could show before: Day and
+  // Timeline are one date, Week is seven, and Board drops the calendar
+  // entirely. Chips are coloured by CLIENT/PROJECT rather than by category --
+  // over a month the useful question is whose work the time went to, not
+  // work-versus-personal. Untagged tasks fall back to their category colour.
+  const MONTH_CHIPS_PER_DAY = 3;
+  function renderMonthView() {
+    if (!el.monthWeekdays.childElementCount) {
+      DAY_NAMES.forEach((d) => {
+        const s = document.createElement("span");
+        s.textContent = d;
+        el.monthWeekdays.appendChild(s);
+      });
+    }
+    el.monthGrid.innerHTML = "";
+
+    const sel = parseDateKey(selectedDate);
+    const year = sel.getFullYear();
+    const month = sel.getMonth();
+    const first = new Date(year, month, 1);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const lead = first.getDay();
+    // Whole weeks only, so the grid keeps its columns: pad back to the Sunday
+    // before the 1st and forward to the Saturday after the last day.
+    const cells = Math.ceil((lead + daysInMonth) / 7) * 7;
+    const todayKey = toDateKey(today);
+
+    for (let i = 0; i < cells; i++) {
+      const d = new Date(year, month, i - lead + 1);
+      const key = toDateKey(d);
+      const inMonth = d.getMonth() === month;
+      const list = getVisibleTasks(key);
+
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = "month-cell"
+        + (inMonth ? "" : " outside")
+        + (key === todayKey ? " today" : "")
+        + (key === selectedDate ? " selected" : "");
+      cell.dataset.dateKey = key;
+      cell.setAttribute("aria-label",
+        `${formatDateDisplay(key)} — ${list.length === 1 ? "1 item" : list.length + " items"}`);
+
+      const head = document.createElement("div");
+      head.className = "month-cell-head";
+      const num = document.createElement("span");
+      num.className = "month-cell-num";
+      num.textContent = String(d.getDate());
+      head.appendChild(num);
+      if (list.length) {
+        const doneN = list.filter((t) => isDoneOn(t, key)).length;
+        const count = document.createElement("span");
+        count.className = "month-cell-count" + (doneN === list.length ? " all-done" : "");
+        count.textContent = `${doneN}/${list.length}`;
+        head.appendChild(count);
+      }
+      cell.appendChild(head);
+
+      if (list.length) {
+        const chips = document.createElement("div");
+        chips.className = "month-cell-chips";
+        list.slice(0, MONTH_CHIPS_PER_DAY).forEach((t) => {
+          const chip = document.createElement("span");
+          const done = isDoneOn(t, key);
+          chip.className = "month-chip" + (done ? " done" : "")
+            + (isOverdue(key, t, done) ? " overdue" : "");
+          if (t.tag) {
+            chip.classList.add("tagged");
+            applyTagColor(chip, t.tag);
+          } else {
+            chip.style.setProperty("--cat-color", catInfo(t.category).color);
+          }
+          // The title carries the full text: the chip is clipped by design, and
+          // a hover/long-press should still be able to answer "which one?".
+          chip.title = (t.time ? formatTimeDisplay(t.time) + " · " : "") + t.title;
+          const label = document.createElement("span");
+          label.className = "month-chip-label";
+          label.textContent = t.title;
+          chip.appendChild(label);
+          chips.appendChild(chip);
+        });
+        if (list.length > MONTH_CHIPS_PER_DAY) {
+          const more = document.createElement("span");
+          more.className = "month-more";
+          more.textContent = `+${list.length - MONTH_CHIPS_PER_DAY} more`;
+          chips.appendChild(more);
+        }
+        cell.appendChild(chips);
+      }
+
+      cell.addEventListener("click", () => {
+        selectedDate = key;
+        // Selecting a day outside the current month follows it, the way the
+        // sidebar calendar does, rather than leaving the grid on a month the
+        // selection no longer belongs to.
+        if (!inMonth) setViewedMonth(d.getFullYear(), d.getMonth());
+        else renderAll();
+        if (list.length) openDayDetail(key);
+      });
+      el.monthGrid.appendChild(cell);
+    }
   }
 
   // ---------- Week view ----------

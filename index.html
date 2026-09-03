@@ -109,6 +109,7 @@
       <button type="button" class="view-tab active" data-view="home" role="tab" aria-selected="true">Home</button>
       <button type="button" class="view-tab" data-view="day" role="tab" aria-selected="false">Day</button>
       <button type="button" class="view-tab" data-view="week" role="tab" aria-selected="false">Week</button>
+      <button type="button" class="view-tab" data-view="month" role="tab" aria-selected="false">Month</button>
       <button type="button" class="view-tab" data-view="timeline" role="tab" aria-selected="false">Timeline</button>
       <button type="button" class="view-tab" data-view="board" role="tab" aria-selected="false">Board</button>
     </div>
@@ -235,6 +236,10 @@
       </main>
 
       <div class="week-view" id="weekView" hidden></div>
+      <div class="month-view" id="monthView" hidden>
+        <div class="month-weekdays" id="monthWeekdays"></div>
+        <div class="month-grid" id="monthGrid"></div>
+      </div>
       <div class="timeline-view" id="timelineView" hidden></div>
       <div class="board-view" id="boardView" hidden></div>
     </div>
