@@ -398,6 +398,22 @@
       </label>
     </div>
 
+    <div class="span-field" id="spanField">
+      <label class="span-toggle">
+        <input type="checkbox" id="taskSpans" />
+        <span>Runs over several days</span>
+      </label>
+      <div class="span-until" id="spanUntilRow" hidden>
+        <span class="span-until-label">Until</span>
+        <button type="button" id="taskEndDateBtn" class="picker-trigger">
+          <span id="taskEndDateDisplay">Select last day</span>
+          <span class="picker-trigger-icon" data-icon="calendar"></span>
+        </button>
+        <input type="hidden" id="taskEndDate" />
+      </div>
+      <p class="span-hint" id="spanHint" hidden></p>
+    </div>
+
     <div class="field-row">
       <label>Start time
         <button type="button" id="taskTimeBtn" class="picker-trigger">

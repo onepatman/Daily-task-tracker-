@@ -347,6 +347,13 @@
     repeatEveryField: document.getElementById("repeatEveryField"),
     repeatEvery: document.getElementById("repeatEvery"),
     repeatEveryHint: document.getElementById("repeatEveryHint"),
+    spanField: document.getElementById("spanField"),
+    taskSpans: document.getElementById("taskSpans"),
+    spanUntilRow: document.getElementById("spanUntilRow"),
+    taskEndDateBtn: document.getElementById("taskEndDateBtn"),
+    taskEndDateDisplay: document.getElementById("taskEndDateDisplay"),
+    taskEndDate: document.getElementById("taskEndDate"),
+    spanHint: document.getElementById("spanHint"),
     repeatDaysField: document.getElementById("repeatDaysField"),
     repeatDays: document.getElementById("repeatDays"),
     repeatUntilField: document.getElementById("repeatUntilField"),
@@ -614,6 +621,7 @@
     if (t.endTime === undefined) t.endTime = "";
     if (t.repeatDays === undefined) t.repeatDays = [];
     if (t.repeatEvery === undefined) t.repeatEvery = 0;
+    if (t.endDate === undefined) t.endDate = "";
     if (t.repeatUntil === undefined) t.repeatUntil = "";
     if (t.repeat !== undefined) return t;
     return {
@@ -888,8 +896,24 @@
     }
     return task.repeat;
   }
+  // A task that runs across days has ONE completion, not one per day -- that is
+  // the whole difference from a daily repeat, where each day is its own tick.
+  // isDoneOn/setDoneOn already store a single flag for repeat === "none", so
+  // spanning days needs no extra state, only a wider occursOn.
+  function taskEndDate(task) {
+    return task.endDate && task.endDate > task.startDate ? task.endDate : task.startDate;
+  }
+  function isMultiDay(task) {
+    return task.repeat === "none" && taskEndDate(task) > task.startDate;
+  }
+  function spanDayCount(task) {
+    return Math.round((parseDateKey(taskEndDate(task)) - parseDateKey(task.startDate)) / 86400000) + 1;
+  }
+  function spanDayIndex(task, dateKey) {
+    return Math.round((parseDateKey(dateKey) - parseDateKey(task.startDate)) / 86400000) + 1;
+  }
   function occursOn(task, dateKey) {
-    if (task.repeat === "none") return task.startDate === dateKey;
+    if (task.repeat === "none") return dateKey >= task.startDate && dateKey <= taskEndDate(task);
     if (task.skipped && task.skipped[dateKey]) return false;
     return matchesRepeat(task, parseDateKey(dateKey));
   }
@@ -1750,6 +1774,8 @@
     }
 
     meta.appendChild(buildPriorityChip(task, dateKey, done));
+    const spanChip = buildSpanChip(task, dateKey);
+    if (spanChip) meta.appendChild(spanChip);
 
     if (task.subtasks && task.subtasks.length) {
       const subDone = task.subtasks.filter((s) => s.done).length;
@@ -1993,6 +2019,10 @@
   function isOverdue(dateKey, task, doneFlag) {
     if (doneFlag) return false;
     const todayKey = toDateKey(new Date());
+    // A run that is still under way is not late. Only once its last day has
+    // passed does an unfinished multi-day task count as overdue -- otherwise
+    // every earlier day of a five-day job would report itself late from day two.
+    if (isMultiDay(task)) return taskEndDate(task) < todayKey;
     if (dateKey < todayKey) return true;
     if (dateKey > todayKey || !task.time) return false;
     const now = new Date();
@@ -2005,6 +2035,17 @@
   // purely a display override so the badge grabs attention, without ever
   // touching task.priority itself (filters, stats, and the original
   // priority all stay intact once the task is done or rescheduled).
+  // Says where in the run this day sits, so a five-day job does not look like
+  // five identical copies of itself.
+  function buildSpanChip(task, dateKey) {
+    if (!isMultiDay(task)) return null;
+    const chip = document.createElement("span");
+    chip.className = "task-priority task-span-chip";
+    chip.innerHTML = iconSvg("calendar")
+      + ` Day ${spanDayIndex(task, dateKey)} of ${spanDayCount(task)}`;
+    chip.title = `${formatDateDisplay(task.startDate)} → ${formatDateDisplay(taskEndDate(task))}`;
+    return chip;
+  }
   function buildPriorityChip(task, dateKey, doneFlag) {
     const overdue = isOverdue(dateKey, task, doneFlag);
     const pri = document.createElement("span");
@@ -2072,7 +2113,12 @@
       const d = new Date(year, month, i - lead + 1);
       const key = toDateKey(d);
       const inMonth = d.getMonth() === month;
-      const list = getVisibleTasks(key);
+      // Runs are hoisted to the top of every cell they touch. Their bars only
+      // join up if they sit on the same row in each cell -- one busier day
+      // sorting a run into second place would kink the bar downward there.
+      const list = getVisibleTasks(key)
+        .slice()
+        .sort((a, b) => Number(isMultiDay(b)) - Number(isMultiDay(a)));
 
       const cell = document.createElement("button");
       cell.type = "button";
@@ -2107,18 +2153,34 @@
           const done = isDoneOn(t, key);
           chip.className = "month-chip" + (done ? " done" : "")
             + (isOverdue(key, t, done) ? " overdue" : "");
+          // A run reads as one bar across the days it covers: square off the
+          // inner edges so consecutive cells join up, and only the first day
+          // (or the first day of a new week) carries the title.
+          let spanLabel = true;
+          if (isMultiDay(t)) {
+            const first = key === t.startDate;
+            const last = key === taskEndDate(t);
+            chip.classList.add("span");
+            if (!first) chip.classList.add("span-continues-left");
+            if (!last) chip.classList.add("span-continues-right");
+            spanLabel = first || d.getDay() === 0;
+            chip.title = `${t.title} — ${formatDateDisplay(t.startDate)} → ${formatDateDisplay(taskEndDate(t))}`;
+          }
           if (t.tag) {
             chip.classList.add("tagged");
             applyTagColor(chip, t.tag);
           } else {
             chip.style.setProperty("--cat-color", catInfo(t.category).color);
           }
-          // The title carries the full text: the chip is clipped by design, and
-          // a hover/long-press should still be able to answer "which one?".
-          chip.title = (t.time ? formatTimeDisplay(t.time) + " · " : "") + t.title;
+          // The title attribute carries the full text: the chip is clipped by
+          // design, and a hover/long-press should still answer "which one?".
+          // A run already set its own title above, naming the whole range.
+          if (!isMultiDay(t)) {
+            chip.title = (t.time ? formatTimeDisplay(t.time) + " · " : "") + t.title;
+          }
           const label = document.createElement("span");
           label.className = "month-chip-label";
-          label.textContent = t.title;
+          label.textContent = spanLabel ? t.title : "";
           chip.appendChild(label);
           chips.appendChild(chip);
         });
@@ -2496,6 +2558,8 @@
       meta.appendChild(tagChip);
     }
     meta.appendChild(buildPriorityChip(task, dateKey, done));
+    const spanChip = buildSpanChip(task, dateKey);
+    if (spanChip) meta.appendChild(spanChip);
     if (task.repeat && task.repeat !== "none") {
       const rep = document.createElement("span");
       rep.className = "task-priority";
@@ -2688,6 +2752,10 @@
       const key = toDateKey(cursor);
       tasksForDate(key).forEach((t) => {
         if (isDoneOn(t, key)) return;
+        // A multi-day run whose last day has not arrived is in progress, not
+        // late -- listing its earlier days here is what made a five-day job
+        // report itself overdue from day two.
+        if (isMultiDay(t) && !isOverdue(key, t, false)) return;
         const seen = byTaskId.get(t.id);
         if (seen) { seen.missedDateKeys.push(key); return; }
         const entry = { task: t, dateKey: key, missedDateKeys: [key] };
@@ -3005,6 +3073,8 @@
       meta.appendChild(tagChip);
     }
     meta.appendChild(buildPriorityChip(task, dateKey, done));
+    const spanChip = buildSpanChip(task, dateKey);
+    if (spanChip) meta.appendChild(spanChip);
     if (missedCount > 1) {
       const missed = document.createElement("span");
       missed.className = "task-missed-chip";
@@ -3788,6 +3858,13 @@
     title.className = "pc-title";
     title.textContent = task.title;
     tdTask.appendChild(title);
+    if (isMultiDay(task)) {
+      const span = document.createElement("div");
+      span.className = "pc-span";
+      span.textContent = `Runs ${formatDateDisplay(task.startDate)} → ${formatDateDisplay(taskEndDate(task))}`
+        + ` (day ${spanDayIndex(task, dateKey)} of ${spanDayCount(task)})`;
+      tdTask.appendChild(span);
+    }
     if (task.tag && withTag) {
       const tag = document.createElement("div");
       tag.className = "pc-tag";
@@ -4107,6 +4184,13 @@
     if (task.time) {
       lines.push("DTSTART:" + dateStr + "T" + icsTimeStamp(task.time));
       lines.push("DTEND:" + dateStr + "T" + icsTimeStamp(task.endTime || task.time));
+    } else if (isMultiDay(task)) {
+      // An all-day VEVENT's DTEND is exclusive, so the day after the last one
+      // is what makes the run cover its final day rather than stopping short.
+      const after = parseDateKey(taskEndDate(task));
+      after.setDate(after.getDate() + 1);
+      lines.push("DTSTART;VALUE=DATE:" + dateStr);
+      lines.push("DTEND;VALUE=DATE:" + icsDateStamp(toDateKey(after)));
     } else {
       lines.push("DTSTART;VALUE=DATE:" + dateStr);
     }
@@ -4286,12 +4370,52 @@
       el.repeatDays.appendChild(btn);
     });
   }
+  // A run across days and a repeat are different ideas, and combining them
+  // ("every Monday, for five days") has no coherent meaning here -- so the two
+  // controls are mutually exclusive rather than silently producing nonsense.
+  function renderSpanFields() {
+    const repeating = el.taskRepeat.value !== "none";
+    el.spanField.hidden = repeating;
+    if (repeating) {
+      el.taskSpans.checked = false;
+      el.taskEndDate.value = "";
+    }
+    const on = el.taskSpans.checked;
+    el.spanUntilRow.hidden = !on;
+    if (!on) {
+      el.taskEndDate.value = "";
+      el.spanHint.hidden = true;
+      if (dpTarget === DP_TARGETS.taskEndDate) closeDatePicker();
+      return;
+    }
+    const start = el.taskDate.value || selectedDate;
+    let end = el.taskEndDate.value;
+    // An end before the start would make the run vanish from every day, so it
+    // is pulled forward rather than saved as an empty range.
+    if (end && end < start) end = start;
+    if (!end) {
+      const d = parseDateKey(start);
+      d.setDate(d.getDate() + 2);
+      end = toDateKey(d);
+    }
+    el.taskEndDate.value = end;
+    el.taskEndDateDisplay.textContent = formatDateDisplay(end);
+    const days = spanDayCount({ startDate: start, endDate: end });
+    el.spanHint.textContent = `${formatDateDisplay(start)} → ${formatDateDisplay(end)} · ${days} days, one tick to finish.`;
+    el.spanHint.hidden = false;
+  }
+  el.taskSpans.addEventListener("change", () => { renderSpanFields(); renderWorkloadHint(); });
+  el.taskEndDateBtn.addEventListener("click", () => {
+    if (el.datePickerPopover.hidden || dpTarget !== DP_TARGETS.taskEndDate) openDatePicker(DP_TARGETS.taskEndDate);
+    else closeDatePicker();
+  });
   function syncRepeatFields() {
     const mode = el.taskRepeat.value;
     el.repeatDaysField.hidden = mode !== "custom";
     el.repeatEveryField.hidden = mode !== "everyweeks";
     el.repeatUntilField.hidden = mode === "none";
     if (mode === "everyweeks") renderRepeatEveryHint();
+    renderSpanFields();
     if (mode === "none" && dpTarget === DP_TARGETS.repeatUntil) closeDatePicker();
   }
   // Says the rule back in plain words -- "every 2 weeks on Friday, next on
@@ -4330,6 +4454,13 @@
       get btn() { return el.taskDateBtn; },
       get anchor() { return el.taskDateBtn.closest(".field-row"); },
       onPick: null,
+    },
+    taskEndDate: {
+      get input() { return el.taskEndDate; },
+      get display() { return el.taskEndDateDisplay; },
+      get btn() { return el.taskEndDateBtn; },
+      get anchor() { return el.spanUntilRow; },
+      onPick: () => renderSpanFields(),
     },
     repeatUntil: {
       get input() { return el.repeatUntil; },
@@ -5094,6 +5225,8 @@
     el.quickParseHint.hidden = false;
     el.taskDate.value = selectedDate;
     el.taskDateDisplay.textContent = formatDateDisplay(selectedDate);
+    el.taskSpans.checked = false;
+    el.taskEndDate.value = "";
     el.taskTime.value = "";
     el.taskTimeDisplay.textContent = "No time set";
     el.taskEndTime.value = "";
@@ -5121,6 +5254,9 @@
     el.taskTitle.value = task.title;
     el.taskDate.value = task.startDate;
     el.taskDateDisplay.textContent = formatDateDisplay(task.startDate);
+    el.taskSpans.checked = isMultiDay(task);
+    el.taskEndDate.value = isMultiDay(task) ? task.endDate : "";
+    el.taskEndDateDisplay.textContent = isMultiDay(task) ? formatDateDisplay(task.endDate) : "Select last day";
     el.taskCategory.value = task.category;
     el.taskPriority.value = task.priority;
     el.taskTime.value = task.time || "";
@@ -5241,6 +5377,7 @@
       repeat: el.taskRepeat.value,
       repeatDays: modalRepeatDays.slice().sort(),
       repeatEvery: el.taskRepeat.value === "everyweeks" ? el.repeatEvery.value : "",
+      endDate: el.taskSpans.checked ? el.taskEndDate.value : "",
       repeatUntil: el.repeatUntil.value,
       reminder: el.taskReminder.checked,
       notes: el.taskNotes.value.trim(),
@@ -5288,6 +5425,8 @@
     const repeat = el.taskRepeat.value;
     const repeatDays = repeat === "custom" ? modalRepeatDays.slice().sort() : [];
     const repeatEvery = repeat === "everyweeks" ? repeatEveryWeeks({ repeatEvery: el.repeatEvery.value }) : 0;
+    const endDate = repeat === "none" && el.taskSpans.checked && el.taskEndDate.value > startDate
+      ? el.taskEndDate.value : "";
     const repeatUntil = repeat === "none" ? "" : (el.repeatUntil.value || "");
     if (repeat === "custom" && repeatDays.length === 0) {
       showConfirm("Pick at least one day for a custom repeat.", [{ label: "OK" }]);
@@ -5303,13 +5442,13 @@
     // The store write above is async, so re-read the edit target rather than
     // trusting a module-level variable that closeModal() may have since reset.
     if (target) {
-      Object.assign(target, { title, category, priority, time, endTime, reminder, notes, tag, repeat, repeatDays, repeatEvery, repeatUntil, subtasks, startDate, photo });
+      Object.assign(target, { title, category, priority, time, endTime, reminder, notes, tag, repeat, repeatDays, repeatEvery, repeatUntil, subtasks, startDate, endDate, photo });
     } else {
       tasks.push({
         id: uid(),
         title, category, priority, time, endTime, reminder, notes, tag, subtasks, photo,
         repeat, repeatDays, repeatEvery, repeatUntil,
-        startDate,
+        startDate, endDate,
         done: false,
         notified: false,
         completions: {},

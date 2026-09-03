@@ -2760,6 +2760,18 @@ body[data-view="month"] .tb-sheet-date { display: none; }
   body[data-view="month"] .app-body { grid-template-columns: 1fr; }
 }
 
+/* ---------- Multi-day run (task form) ---------- */
+.span-field { margin: -6px 0 14px; }
+.span-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-soft); cursor: pointer; }
+.span-toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
+.span-until { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+.span-until-label { font-size: 12px; font-weight: 600; color: var(--text-soft); flex: none; }
+.span-until .picker-trigger { flex: 1; min-width: 0; }
+.span-hint { margin: 8px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-faint); }
+
+/* The run chip on a task row, and the joined-up bar in Month view. */
+.task-span-chip { color: var(--accent-2); }
+
 /* ---------- Streak heatmap (Insights) ---------- */
 .heatmap {
   display: grid;
@@ -2914,6 +2926,22 @@ body[data-view="month"] .tb-sheet-date { display: none; }
   color: hsl(var(--tag-hue) 62% 32%);
 }
 .month-chip-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A run is one bar across its days: the inner edges are squared off and the
+   negative margins close the grid gap, so consecutive cells read as continuous
+   rather than as a row of separate chips. */
+.month-chip.span-continues-right {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  margin-right: -8px;
+  padding-right: 12px;
+}
+.month-chip.span-continues-left {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left-width: 0;
+  margin-left: -8px;
+  padding-left: 12px;
+}
 .month-chip.done { opacity: 0.5; }
 .month-chip.done .month-chip-label { text-decoration: line-through; }
 .month-chip.overdue { border-left-color: var(--red); background: color-mix(in srgb, var(--red) 15%, transparent); }
