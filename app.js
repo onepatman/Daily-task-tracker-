@@ -286,6 +286,7 @@
     dayView: document.getElementById("dayView"),
     weekView: document.getElementById("weekView"),
     monthView: document.getElementById("monthView"),
+    monthDragHint: document.getElementById("monthDragHint"),
     insightHeatmap: document.getElementById("insightHeatmap"),
     insightHeatmapSummary: document.getElementById("insightHeatmapSummary"),
     backupNudge: document.getElementById("backupNudge"),
@@ -1425,6 +1426,7 @@
     el.selectModeBtn.hidden = view !== "day";
     if (view !== "day" && selectMode) setSelectMode(false);
     renderCurrentView();
+    if (view === "month") setTimeout(maybeShowMonthDragHint, 400);
   }
   el.viewTabs.querySelectorAll(".view-tab").forEach((tab) => {
     tab.addEventListener("click", () => setView(tab.dataset.view));
@@ -2325,6 +2327,10 @@
       }
 
       cell.addEventListener("click", () => {
+        // A drag that ended on this cell already did its work by opening the
+        // form; the click the browser sends afterwards must not also select
+        // the day and open its detail sheet on top.
+        if (monthDragConsumedClick) { monthDragConsumedClick = false; return; }
         selectedDate = key;
         // Selecting a day outside the current month follows it, the way the
         // sidebar calendar does, rather than leaving the grid on a month the
@@ -2335,7 +2341,125 @@
       });
       el.monthGrid.appendChild(cell);
     }
+    paintMonthDragRange();
   }
+
+  // ---------- Month drag-select ----------
+  // Dragging across the grid picks a run of days and opens the form with the
+  // range already filled in -- the calendar is where a multi-day job is
+  // actually being looked at, so it is the natural place to draw one.
+  //
+  // Mouse and pen start as soon as the pointer leaves the day it went down on.
+  // Touch has to press and hold first: on a phone, a finger dragged up the
+  // grid is how the page is scrolled, and there is no way to tell the two
+  // gestures apart at the moment the finger lands.
+  const MONTH_DRAG_HOLD_MS = 350;
+  const MONTH_DRAG_SLOP_PX = 10;
+  let monthDrag = null;
+  let monthDragConsumedClick = false;
+
+  function monthCellAt(x, y) {
+    const hit = document.elementFromPoint(x, y);
+    const cell = hit && hit.closest ? hit.closest(".month-cell") : null;
+    // elementFromPoint can land on a cell in another rendering of the grid
+    // (there is only one), but never on one outside it -- guard anyway so a
+    // stray hit cannot put the drag into a state the grid cannot paint.
+    return cell && el.monthGrid.contains(cell) ? cell : null;
+  }
+  function monthDragBounds() {
+    if (!monthDrag || !monthDrag.active) return null;
+    const a = monthDrag.anchor, b = monthDrag.current;
+    return a <= b ? { from: a, to: b } : { from: b, to: a };
+  }
+  function paintMonthDragRange() {
+    const range = monthDragBounds();
+    el.monthGrid.querySelectorAll(".month-cell").forEach((cell) => {
+      const key = cell.dataset.dateKey;
+      const inRange = !!range && key >= range.from && key <= range.to;
+      cell.classList.toggle("drag-range", inRange);
+      cell.classList.toggle("drag-range-start", inRange && key === range.from);
+      cell.classList.toggle("drag-range-end", inRange && key === range.to);
+    });
+    if (!range) { el.monthDragHint.hidden = true; return; }
+    const days = spanDayCount({ startDate: range.from, endDate: range.to });
+    el.monthDragHint.textContent = range.from === range.to
+      ? `${formatDateDisplay(range.from)} — drag further for a run of days`
+      : `${formatDateDisplay(range.from)} → ${formatDateDisplay(range.to)} · ${days} days`;
+    el.monthDragHint.hidden = false;
+  }
+  function endMonthDrag(commit) {
+    if (!monthDrag) return;
+    clearTimeout(monthDrag.holdTimer);
+    const range = monthDragBounds();
+    const wasActive = monthDrag.active;
+    monthDrag = null;
+    paintMonthDragRange();
+    if (!wasActive) return;
+    // The click that follows a mouse-up belongs to the drag, not to the day
+    // under the cursor.
+    monthDragConsumedClick = true;
+    setTimeout(() => { monthDragConsumedClick = false; }, 400);
+    if (commit && range && range.to > range.from) {
+      selectedDate = range.from;
+      openCreateModal({ startDate: range.from, endDate: range.to });
+    }
+  }
+  el.monthGrid.addEventListener("pointerdown", (e) => {
+    if (e.button != null && e.button !== 0) return;
+    const cell = e.target.closest && e.target.closest(".month-cell");
+    if (!cell) return;
+    const coarse = e.pointerType !== "mouse" && e.pointerType !== "pen";
+    monthDrag = {
+      anchor: cell.dataset.dateKey,
+      current: cell.dataset.dateKey,
+      active: false,
+      coarse,
+      startX: e.clientX,
+      startY: e.clientY,
+      holdTimer: 0,
+    };
+    if (coarse) {
+      monthDrag.holdTimer = setTimeout(() => {
+        if (!monthDrag) return;
+        monthDrag.active = true;
+        paintMonthDragRange();
+        if (navigator.vibrate) navigator.vibrate(15);
+      }, MONTH_DRAG_HOLD_MS);
+    }
+  });
+  el.monthGrid.addEventListener("pointermove", (e) => {
+    if (!monthDrag) return;
+    if (!monthDrag.active) {
+      const moved = Math.abs(e.clientX - monthDrag.startX) + Math.abs(e.clientY - monthDrag.startY);
+      // A finger that moves before the hold has elapsed is scrolling the page.
+      if (monthDrag.coarse) {
+        if (moved > MONTH_DRAG_SLOP_PX) endMonthDrag(false);
+        return;
+      }
+      // A mouse only counts as dragging once it reaches another day, so a
+      // click with a shaky hand still opens the day it was aimed at.
+      const cell = monthCellAt(e.clientX, e.clientY);
+      if (!cell || cell.dataset.dateKey === monthDrag.anchor) return;
+      monthDrag.active = true;
+    }
+    const cell = monthCellAt(e.clientX, e.clientY);
+    if (cell) monthDrag.current = cell.dataset.dateKey;
+    paintMonthDragRange();
+  });
+  // On the document rather than the grid: a drag released past the edge of the
+  // calendar still has to end, and pointer capture is not an option here --
+  // capturing redirects the click too, which would break tapping a single day.
+  document.addEventListener("pointerup", () => endMonthDrag(true));
+  document.addEventListener("pointercancel", () => endMonthDrag(false));
+  // Once the hold has turned into a range drag, the finger must stop scrolling
+  // the page. touchmove is the only event that can still cancel that, and it
+  // has to be non-passive to be allowed to.
+  el.monthGrid.addEventListener("touchmove", (e) => {
+    if (monthDrag && monthDrag.active) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && monthDrag) endMonthDrag(false);
+  });
 
 
   // ---------- Streak heatmap (Insights) ----------
@@ -5348,7 +5472,12 @@
   });
 
   // ---------- Modal ----------
-  function openCreateModal() {
+  // `prefill` carries a date range picked outside the form -- currently a drag
+  // across the month grid. Without it the form opens on the selected day, as
+  // it always has.
+  function openCreateModal(prefill) {
+    const preStart = (prefill && prefill.startDate) || selectedDate;
+    const preEnd = (prefill && prefill.endDate) || "";
     editingTask = null;
     editingDateKey = null;
     el.taskForm.reset();
@@ -5360,10 +5489,10 @@
     el.modalTitle.textContent = "Log Item";
     clearQuickParse();
     el.quickParseHint.hidden = false;
-    el.taskDate.value = selectedDate;
-    el.taskDateDisplay.textContent = formatDateDisplay(selectedDate);
-    el.taskSpans.checked = false;
-    el.taskEndDate.value = "";
+    el.taskDate.value = preStart;
+    el.taskDateDisplay.textContent = formatDateDisplay(preStart);
+    el.taskSpans.checked = preEnd > preStart;
+    el.taskEndDate.value = preEnd > preStart ? preEnd : "";
     el.taskTime.value = "";
     el.taskTimeDisplay.textContent = "No time set";
     el.taskEndTime.value = "";
@@ -5529,7 +5658,7 @@
   }
   el.taskTitle.addEventListener("input", runQuickParse);
 
-  el.addTaskBtn.addEventListener("click", openCreateModal);
+  el.addTaskBtn.addEventListener("click", () => openCreateModal());
   el.cancelTask.addEventListener("click", closeModal);
   // Everything the form currently holds, as one comparable value. Snapshotted
   // when the modal opens so an accidental dismissal can tell "nothing typed"
@@ -5940,6 +6069,16 @@
   }
   function maybeShowTabsHint() {
     showCoachHint("tabs", el.viewTabs, "New: Home shows what's overdue and due soon. Board groups your tasks by client/project.", "below");
+  }
+  // A gesture nobody is told about is a gesture nobody uses, so the month grid
+  // says so once, the first time it is opened.
+  function maybeShowMonthDragHint() {
+    if (hintsShownThisSession.has("monthdrag") || getSeenHints().monthdrag) return;
+    const anchor = el.monthGrid.querySelector(".month-cell");
+    if (!anchor) return;
+    showCoachHint("monthdrag", el.monthGrid,
+      "Drag across days to log something that runs over several days — the form opens with the dates already filled in.",
+      "below");
   }
   function maybeShowSwipeHint() {
     if (hintsShownThisSession.has("swipe") || getSeenHints().swipe) return;
