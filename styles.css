@@ -2893,6 +2893,12 @@ body[data-view="month"] .tb-sheet-date { display: none; }
   cursor: pointer;
   overflow: hidden;
 }
+/* The floor only. Cells have no fixed height, so a busy day grows the row it
+   sits in and the ones beside it follow -- raising the floor on a big screen
+   is about balance, not about fitting the extra chips in. */
+@media (min-width: 1100px) {
+  .month-cell { min-height: 118px; }
+}
 .month-cell:hover { border-color: var(--accent); }
 .month-cell.outside { opacity: 0.42; }
 .month-cell.today { border-color: var(--accent); }
@@ -2911,6 +2917,59 @@ body[data-view="month"] .tb-sheet-date { display: none; }
 /* The grid must not hand a drag over to the browser's own text or image
    dragging, which would abandon the selection halfway across the week. */
 .month-grid { user-select: none; -webkit-user-select: none; }
+/* The key to the chip colours, and a filter: the month's projects with the
+   number of days each one touched. */
+.month-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+.month-legend-caption {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-right: 2px;
+}
+.month-legend-item {
+  --tag-hue: 210;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px 4px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, hsl(var(--tag-hue) 60% 50%) 40%, transparent);
+  background: color-mix(in srgb, hsl(var(--tag-hue) 60% 50%) 10%, var(--surface));
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.month-legend-item:hover { border-color: hsl(var(--tag-hue) 60% 50%); }
+.month-legend-item.active {
+  border-color: hsl(var(--tag-hue) 60% 50%);
+  background: color-mix(in srgb, hsl(var(--tag-hue) 60% 50%) 26%, var(--surface));
+  font-weight: 700;
+}
+.month-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: hsl(var(--tag-hue) 60% 50%);
+  flex: none;
+}
+.month-legend-name { white-space: nowrap; }
+.month-legend-days {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.month-legend-item.active .month-legend-days { color: inherit; }
 .month-drag-hint {
   position: sticky;
   bottom: 10px;
@@ -2940,6 +2999,7 @@ body[data-view="month"] .tb-sheet-date { display: none; }
 .month-chip {
   --cat-color: var(--cat-other);
   display: block;
+  position: relative;
   min-width: 0;
   padding: 3px 6px;
   border-radius: 5px;
@@ -2963,6 +3023,12 @@ body[data-view="month"] .tb-sheet-date { display: none; }
 /* A run is one bar across its days: the inner edges are squared off and the
    negative margins close the grid gap, so consecutive cells read as continuous
    rather than as a row of separate chips. */
+/* Only the first day of a run (and the first day of each new week) carries the
+   title, so the other segments have no text to give them height and used to
+   collapse to a sliver -- the bar visibly stepped down after its first day,
+   and there was almost nothing left to grab. Every segment is held at the
+   height of a labelled one instead. */
+.month-chip.span { min-height: calc(1.35em + 6px); }
 .month-chip.span-continues-right {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
@@ -2976,10 +3042,48 @@ body[data-view="month"] .tb-sheet-date { display: none; }
   margin-left: -8px;
   padding-left: 12px;
 }
+/* Grab handles on the two real ends of a run. Kept invisible until the cell is
+   hovered so the calendar is not littered with controls, but they still have a
+   full-height hit area either way. */
+.month-chip.draggable { cursor: grab; }
+.month-chip.draggable:active { cursor: grabbing; }
+.span-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  cursor: ew-resize;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.span-grip.start { left: -2px; }
+.span-grip.end { right: -2px; }
+.span-grip::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--text);
+  opacity: 0.55;
+}
+.month-cell:hover .span-grip,
+.span-grip:hover { opacity: 1; }
 .month-chip.done { opacity: 0.5; }
 .month-chip.done .month-chip-label { text-decoration: line-through; }
 .month-chip.overdue { border-left-color: var(--red); background: color-mix(in srgb, var(--red) 15%, transparent); }
-.month-more { font-size: 10px; color: var(--text-faint); padding-left: 3px; }
+.month-more {
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.month-cell:hover .month-more { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 
 /* Below this width a cell is ~55px across -- four or five characters, which is
    not a task title, it is a stub. Colour bars carry the same information
@@ -3000,8 +3104,14 @@ body[data-view="month"] .tb-sheet-date { display: none; }
   }
   .month-chip.tagged { background: hsl(var(--tag-hue) 60% 58%); }
   .month-chip.overdue { background: var(--red); }
+  /* Here every chip is already a bar of one fixed height, labelled or not, so
+     the run's minimum would only make it eight times too tall. */
+  .month-chip.span { min-height: 0; }
   .month-chip-label { display: none; }
-  .month-more { font-size: 9px; padding-left: 1px; }
+  /* At this width a chip is a 5px bar. A resize handle on it would be a
+     target nobody can hit; press-and-hold to move the whole run still works. */
+  .span-grip { display: none; }
+  .month-more { font-size: 9px; padding: 1px 5px; }
 }
 
 /* ---------- Category manager ---------- */
