@@ -2649,7 +2649,9 @@ html, body {
        same top-of-viewport space, so this row just scrolls normally. */
     position: static;
     padding: 18px 28px 10px;
-    max-width: 520px;
+    /* Sized to hold every tab on one line -- at 520px the sixth (Board) was
+       pushed under the scroll edge and read as a broken, clipped label. */
+    max-width: 600px;
     background: none;
     border-bottom: none;
   }
@@ -2708,7 +2710,7 @@ html, body {
   .tb-arrow, .tb-icon-btn { width: 46px; height: 46px; font-size: 22px; }
   .tb-select { font-size: 16px; padding: 11px 32px 11px 18px; }
   .tb-sheet-date { font-size: 17px; }
-  .view-tabs-row { padding: 20px 36px 0; max-width: 600px; }
+  .view-tabs-row { padding: 20px 36px 0; max-width: 720px; }
   .view-tab { font-size: 16px; padding: 13px 21px; }
   .view-status-badge { font-size: 14px; padding: 11px 17px; }
 
@@ -2739,6 +2741,116 @@ html, body {
   .week-task-time { font-size: 13.5px; }
   .timeline-task-title { font-size: 15px; }
   .timeline-task-time { font-size: 13.5px; }
+}
+
+/* The month grid IS the calendar, so the sidebar's mini calendar beside it is
+   both redundant and a squeeze -- without it the cells go from ~130px to
+   ~185px and the whole month fits without scrolling. */
+body[data-view="month"] .app-sidebar { display: none; }
+/* Names a single day, which is not what this view is about, and the month/year
+   controls above already say where you are. Dropping it buys the grid a row. */
+body[data-view="month"] .tb-sheet-date { display: none; }
+/* The grid rules live inside the desktop media queries, so the single-column
+   override has to be repeated at each breakpoint that sets two columns. */
+@media (min-width: 900px) {
+  body[data-view="month"] .app-body { grid-template-columns: 1fr; }
+}
+
+/* ---------- Month view ----------
+   The only place the whole month is visible at once. Chips take their colour
+   from the client/project tag, falling back to the category colour when a task
+   has no tag -- over a month the useful question is whose work the time went
+   to, not work-versus-personal. */
+.month-view { display: flex; flex-direction: column; gap: 8px; }
+.month-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  text-align: center;
+}
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.month-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 96px;
+  padding: 7px 7px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+.month-cell:hover { border-color: var(--accent); }
+.month-cell.outside { opacity: 0.42; }
+.month-cell.today { border-color: var(--accent); }
+.month-cell.selected { box-shadow: inset 0 0 0 2px var(--accent); }
+.month-cell-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; }
+.month-cell-num { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--text-soft); }
+.month-cell.today .month-cell-num { color: var(--accent); }
+.month-cell-count { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); }
+.month-cell-count.all-done { color: var(--green, #3ecf8e); }
+.month-cell-chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.month-chip {
+  --cat-color: var(--cat-other);
+  display: block;
+  min-width: 0;
+  padding: 3px 6px;
+  border-radius: 5px;
+  border-left: 3px solid var(--cat-color);
+  background: color-mix(in srgb, var(--cat-color) 16%, transparent);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text);
+}
+.month-chip.tagged {
+  --tag-hue: 220;
+  border-left-color: hsl(var(--tag-hue) 60% 58%);
+  background: hsl(var(--tag-hue) 60% 55% / 0.16);
+  color: hsl(var(--tag-hue) 70% 78%);
+}
+:root[data-theme="light"] .month-chip.tagged {
+  background: hsl(var(--tag-hue) 65% 50% / 0.14);
+  color: hsl(var(--tag-hue) 62% 32%);
+}
+.month-chip-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.month-chip.done { opacity: 0.5; }
+.month-chip.done .month-chip-label { text-decoration: line-through; }
+.month-chip.overdue { border-left-color: var(--red); background: color-mix(in srgb, var(--red) 15%, transparent); }
+.month-more { font-size: 10px; color: var(--text-faint); padding-left: 3px; }
+
+/* Below this width a cell is ~55px across -- four or five characters, which is
+   not a task title, it is a stub. Colour bars carry the same information
+   (how loaded the day is, and whose work) in the space actually available. */
+@media (max-width: 720px) {
+  .month-grid, .month-weekdays { gap: 3px; }
+  .month-weekdays { font-size: 9px; letter-spacing: 0.04em; }
+  .month-cell { min-height: 68px; padding: 4px 3px 5px; gap: 3px; border-radius: 7px; }
+  .month-cell-num { font-size: 12px; }
+  .month-cell-count { font-size: 9px; }
+  .month-cell-chips { gap: 2px; }
+  .month-chip {
+    height: 5px;
+    padding: 0;
+    border-radius: 3px;
+    border-left: none;
+    background: var(--cat-color);
+  }
+  .month-chip.tagged { background: hsl(var(--tag-hue) 60% 58%); }
+  .month-chip.overdue { background: var(--red); }
+  .month-chip-label { display: none; }
+  .month-more { font-size: 9px; padding-left: 1px; }
 }
 
 /* ---------- Category manager ---------- */
