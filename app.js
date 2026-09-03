@@ -317,6 +317,9 @@
     quickParseHint: document.getElementById("quickParseHint"),
     taskDate: document.getElementById("taskDate"),
     taskDateBtn: document.getElementById("taskDateBtn"),
+    repeatEveryField: document.getElementById("repeatEveryField"),
+    repeatEvery: document.getElementById("repeatEvery"),
+    repeatEveryHint: document.getElementById("repeatEveryHint"),
     repeatDaysField: document.getElementById("repeatDaysField"),
     repeatDays: document.getElementById("repeatDays"),
     repeatUntilField: document.getElementById("repeatUntilField"),
@@ -583,6 +586,7 @@
   function migrateTask(t) {
     if (t.endTime === undefined) t.endTime = "";
     if (t.repeatDays === undefined) t.repeatDays = [];
+    if (t.repeatEvery === undefined) t.repeatEvery = 0;
     if (t.repeatUntil === undefined) t.repeatUntil = "";
     if (t.repeat !== undefined) return t;
     return {
@@ -657,6 +661,16 @@
     if (task.repeat === "daily") return true;
     if (task.repeat === "weekdays") { const wd = dateObj.getDay(); return wd >= 1 && wd <= 5; }
     if (task.repeat === "weekly") return dateObj.getDay() === startObj.getDay();
+    if (task.repeat === "everyweeks") {
+      if (dateObj.getDay() !== startObj.getDay()) return false;
+      const every = repeatEveryWeeks(task);
+      // Counted in whole days and then divided, rather than by adding weeks
+      // repeatedly: the same weekday is always a whole number of days away, so
+      // this stays exact across DST changes, which shift the clock but not the
+      // calendar date.
+      const days = Math.round((dateObj - startObj) / 86400000);
+      return days % (every * 7) === 0;
+    }
     if (task.repeat === "custom") return (task.repeatDays || []).includes(dateObj.getDay());
     if (task.repeat === "monthly") {
       // Clamp to the last day of shorter months so a task started on the 31st
@@ -741,12 +755,30 @@
       }
     }
 
+    // "every 2 weeks" / "biweekly" / "every other week" must be tested before
+    // the plain "every week" rule below, which would otherwise match the tail
+    // of the phrase and drop the interval.
+    const nWeeks = text.match(/\bevery\s+(\d{1,2})\s*(?:weeks?|wks?)\b/i);
+    const otherWeek = /\b(bi-?weekly|fortnightly|every\s+other\s+week)\b/i.test(text);
+    if (nWeeks && Number(nWeeks[1]) >= 2) {
+      found.repeat = "everyweeks";
+      found.repeatEvery = Math.min(Number(nWeeks[1]), 26);
+      cut(new RegExp(`\\bevery\\s+${nWeeks[1]}\\s*(?:weeks?|wks?)\\b`, "i"));
+    } else if (otherWeek) {
+      found.repeat = "everyweeks";
+      found.repeatEvery = 2;
+      cut(/\b(bi-?weekly|fortnightly|every\s+other\s+week)\b/i);
+    }
+
     // Repeats before dates: "every monday" must not be eaten by the weekday rule.
-    const everyDow = text.match(new RegExp(`\\bevery\\s+(${FULL_DAY_NAMES.map((d) => d.toLowerCase()).join("|")})s?\\b`, "i"));
+    const everyDow = found.repeat === "everyweeks" ? null
+      : text.match(new RegExp(`\\bevery\\s+(${FULL_DAY_NAMES.map((d) => d.toLowerCase()).join("|")})s?\\b`, "i"));
     if (everyDow) {
       found.repeat = "custom";
       found.repeatDays = [FULL_DAY_NAMES.indexOf(everyDow[1].toUpperCase())];
       cut(new RegExp(`\\bevery\\s+${everyDow[1]}s?\\b`, "i"));
+    } else if (found.repeat === "everyweeks") {
+      /* already claimed above */
     } else if (/\b(every\s+weekday|weekdays)\b/i.test(text)) {
       found.repeat = "weekdays"; cut(/\b(every\s+weekday|weekdays)\b/i);
     } else if (/\b(every\s*day|daily)\b/i.test(text)) {
@@ -811,7 +843,17 @@
     return found;
   }
 
+  // Guards against a stored 0/1/NaN turning "every N weeks" into either an
+  // every-week task or a division by zero.
+  function repeatEveryWeeks(task) {
+    const n = Math.round(Number(task && task.repeatEvery));
+    return Number.isFinite(n) && n >= 2 ? Math.min(n, 26) : 2;
+  }
   function repeatLabel(task) {
+    if (task.repeat === "everyweeks") {
+      const n = repeatEveryWeeks(task);
+      return n === 2 ? "every 2 weeks" : `every ${n} weeks`;
+    }
     if (task.repeat === "custom") {
       const days = (task.repeatDays || []).slice().sort();
       if (!days.length) return "custom";
@@ -3789,6 +3831,8 @@
     if (task.repeat === "daily") lines.push("RRULE:FREQ=DAILY");
     else if (task.repeat === "weekly") lines.push("RRULE:FREQ=WEEKLY");
     else if (task.repeat === "weekdays") lines.push("RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
+    else if (task.repeat === "everyweeks") lines.push("RRULE:FREQ=WEEKLY;INTERVAL=" + repeatEveryWeeks(task));
+    else if (task.repeat === "monthly") lines.push("RRULE:FREQ=MONTHLY");
     if (task.repeat !== "none" && task.skipped) {
       const exKeys = Object.keys(task.skipped).filter((k) => task.skipped[k]);
       if (exKeys.length) {
@@ -3958,11 +4002,29 @@
   function syncRepeatFields() {
     const mode = el.taskRepeat.value;
     el.repeatDaysField.hidden = mode !== "custom";
+    el.repeatEveryField.hidden = mode !== "everyweeks";
     el.repeatUntilField.hidden = mode === "none";
+    if (mode === "everyweeks") renderRepeatEveryHint();
     if (mode === "none" && dpTarget === DP_TARGETS.repeatUntil) closeDatePicker();
+  }
+  // Says the rule back in plain words -- "every 2 weeks on Friday, next on
+  // Sep 25" -- because an interval alone does not tell you which day it lands
+  // on, and that is exactly what a fortnightly reminder is about.
+  function renderRepeatEveryHint() {
+    const n = repeatEveryWeeks({ repeatEvery: el.repeatEvery.value });
+    const startKey = el.taskDate.value || selectedDate;
+    const start = parseDateKey(startKey);
+    const next = new Date(start);
+    next.setDate(next.getDate() + n * 7);
+    const until = el.repeatUntil.value;
+    const beyondEnd = until && toDateKey(next) > until;
+    el.repeatEveryHint.textContent =
+      `on ${FULL_DAY_NAMES[start.getDay()].toLowerCase()}s — ` +
+      (beyondEnd ? "ends before the next one" : `next on ${formatDateDisplay(toDateKey(next))}`);
   }
   function resetRepeatFields(task) {
     modalRepeatDays = task && task.repeatDays ? task.repeatDays.slice() : [];
+    el.repeatEvery.value = String(repeatEveryWeeks(task));
     renderRepeatDays();
     const until = (task && task.repeatUntil) || "";
     el.repeatUntil.value = until;
@@ -4067,6 +4129,7 @@
     }
     syncRepeatFields();
   });
+  el.repeatEvery.addEventListener("input", renderRepeatEveryHint);
   el.repeatUntilClear.addEventListener("click", () => {
     el.repeatUntil.value = "";
     el.repeatUntilDisplay.textContent = "No end date";
@@ -4825,8 +4888,9 @@
     if (p.repeat) {
       el.taskRepeat.value = p.repeat;
       if (p.repeatDays) { modalRepeatDays = p.repeatDays.slice(); renderRepeatDays(); }
+      if (p.repeatEvery) el.repeatEvery.value = String(p.repeatEvery);
       syncRepeatFields();
-      hits.push({ label: repeatLabel({ repeat: p.repeat, repeatDays: p.repeatDays }), tone: "" });
+      hits.push({ label: repeatLabel({ repeat: p.repeat, repeatDays: p.repeatDays, repeatEvery: p.repeatEvery }), tone: "" });
     }
 
     quickParsed = hits.length ? p : null;
@@ -4858,6 +4922,7 @@
       tag: el.taskTag.value.trim(),
       repeat: el.taskRepeat.value,
       repeatDays: modalRepeatDays.slice().sort(),
+      repeatEvery: el.taskRepeat.value === "everyweeks" ? el.repeatEvery.value : "",
       repeatUntil: el.repeatUntil.value,
       reminder: el.taskReminder.checked,
       notes: el.taskNotes.value.trim(),
@@ -4904,6 +4969,7 @@
     const tag = el.taskTag.value.trim();
     const repeat = el.taskRepeat.value;
     const repeatDays = repeat === "custom" ? modalRepeatDays.slice().sort() : [];
+    const repeatEvery = repeat === "everyweeks" ? repeatEveryWeeks({ repeatEvery: el.repeatEvery.value }) : 0;
     const repeatUntil = repeat === "none" ? "" : (el.repeatUntil.value || "");
     if (repeat === "custom" && repeatDays.length === 0) {
       showConfirm("Pick at least one day for a custom repeat.", [{ label: "OK" }]);
@@ -4919,12 +4985,12 @@
     // The store write above is async, so re-read the edit target rather than
     // trusting a module-level variable that closeModal() may have since reset.
     if (target) {
-      Object.assign(target, { title, category, priority, time, endTime, reminder, notes, tag, repeat, repeatDays, repeatUntil, subtasks, startDate, photo });
+      Object.assign(target, { title, category, priority, time, endTime, reminder, notes, tag, repeat, repeatDays, repeatEvery, repeatUntil, subtasks, startDate, photo });
     } else {
       tasks.push({
         id: uid(),
         title, category, priority, time, endTime, reminder, notes, tag, subtasks, photo,
-        repeat, repeatDays, repeatUntil,
+        repeat, repeatDays, repeatEvery, repeatUntil,
         startDate,
         done: false,
         notified: false,
