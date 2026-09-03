@@ -8,6 +8,8 @@
   const TEMPLATES_KEY = "dailyLog.templates.v1";
   const FILTERS_KEY = "dailyLog.filters";
   const PREPARED_BY_KEY = "dailyLog.preparedBy";
+  const LAST_BACKUP_KEY = "dailyLog.lastBackup";
+  const BACKUP_SNOOZE_KEY = "dailyLog.backupSnooze";
   const MONTHS = ["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY",
     "AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
   const DAY_NAMES = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
@@ -65,13 +67,17 @@
   // never removed.
   const CATEGORY_FALLBACK = "other";
   const DEFAULT_CATEGORIES = [
-    { key: "work",     label: "Work",     color: "#5b8def" },
-    { key: "personal", label: "Personal", color: "#b57bf2" },
-    { key: "urgent",   label: "Urgent",   color: "#f76e6e" },
-    { key: "health",   label: "Health",   color: "#3ecf8e" },
-    { key: "errands",  label: "Errands",  color: "#f5a94e" },
-    { key: CATEGORY_FALLBACK, label: "Other", color: "#8a97ab" },
+    { key: "work",     label: "Work",     color: "#5b8def", icon: "pencil" },
+    { key: "personal", label: "Personal", color: "#b57bf2", icon: "checkbox" },
+    { key: "urgent",   label: "Urgent",   color: "#f76e6e", icon: "alertTriangle" },
+    { key: "health",   label: "Health",   color: "#3ecf8e", icon: "checkCircle" },
+    { key: "errands",  label: "Errands",  color: "#f5a94e", icon: "clock" },
+    { key: CATEGORY_FALLBACK, label: "Other", color: "#8a97ab", icon: "tag" },
   ];
+  // Chosen from the icon set the app already ships, so a category icon looks
+  // like it belongs rather than like a pasted-in emoji.
+  const CATEGORY_ICONS = ["tag", "pencil", "checkbox", "clock", "calendar", "camera",
+    "alarm", "bell", "barChart", "printer", "save", "checkCircle", "alertTriangle", "repeat"];
   const CATEGORY_SWATCHES = [
     "#5b8def", "#b57bf2", "#f76e6e", "#3ecf8e", "#f5a94e", "#8a97ab",
     "#2fb8c6", "#e0709f", "#8db600", "#c98b3a", "#7a86f5", "#d4534f",
@@ -87,7 +93,14 @@
       if (!Array.isArray(parsed) || !parsed.length) throw new Error("empty");
       const clean = parsed
         .filter((c) => c && typeof c.key === "string" && c.key)
-        .map((c) => ({ key: c.key, label: String(c.label || c.key), color: c.color || "#8a97ab" }));
+        .map((c) => ({
+          key: c.key,
+          label: String(c.label || c.key),
+          color: c.color || "#8a97ab",
+          // Categories saved before icons existed have none; fall back rather
+          // than render an empty box.
+          icon: CATEGORY_ICONS.includes(c.icon) ? c.icon : "tag",
+        }));
       // The fallback has to exist or a task pointing at a deleted category
       // would render with no colour and no name.
       if (!clean.some((c) => c.key === CATEGORY_FALLBACK)) {
@@ -110,6 +123,10 @@
     return categories.find((c) => c.key === key)
       || categories.find((c) => c.key === CATEGORY_FALLBACK)
       || DEFAULT_CATEGORIES[DEFAULT_CATEGORIES.length - 1];
+  }
+  function categoryIcon(key) {
+    const c = catInfo(key);
+    return CATEGORY_ICONS.includes(c.icon) ? c.icon : "tag";
   }
   function categoryExists(key) {
     return categories.some((c) => c.key === key);
@@ -269,6 +286,13 @@
     dayView: document.getElementById("dayView"),
     weekView: document.getElementById("weekView"),
     monthView: document.getElementById("monthView"),
+    insightHeatmap: document.getElementById("insightHeatmap"),
+    insightHeatmapSummary: document.getElementById("insightHeatmapSummary"),
+    backupNudge: document.getElementById("backupNudge"),
+    backupNudgeText: document.getElementById("backupNudgeText"),
+    backupNudgeBtn: document.getElementById("backupNudgeBtn"),
+    backupNudgeDismiss: document.getElementById("backupNudgeDismiss"),
+    workloadHint: document.getElementById("workloadHint"),
     monthWeekdays: document.getElementById("monthWeekdays"),
     monthGrid: document.getElementById("monthGrid"),
     timelineView: document.getElementById("timelineView"),
@@ -1713,7 +1737,8 @@
     const catChip = document.createElement("span");
     catChip.className = "task-cat-chip";
     catChip.style.background = cat.color;
-    catChip.textContent = cat.label;
+    catChip.innerHTML = iconSvg(categoryIcon(task.category));
+    catChip.appendChild(document.createTextNode(cat.label));
     meta.appendChild(catChip);
 
     if (task.tag) {
@@ -2119,6 +2144,136 @@
     }
   }
 
+
+  // ---------- Streak heatmap (Insights) ----------
+  // Twelve weeks of completion at a glance. A day with nothing planned is left
+  // blank rather than shaded as a failure -- an empty Sunday is not a miss, and
+  // colouring it like one would make the whole grid read as guilt.
+  const HEATMAP_WEEKS = 12;
+  function renderHeatmap() {
+    el.insightHeatmap.innerHTML = "";
+    // Exactly HEATMAP_WEEKS columns: walk back to this week's Sunday, then
+    // eleven more weeks. Counting back a flat 84 days and *then* snapping to
+    // Sunday overshoots by up to six days, which drew a thirteenth column
+    // under a heading that says twelve.
+    const end = new Date(today);
+    const start = new Date(end);
+    start.setDate(start.getDate() - start.getDay() - (HEATMAP_WEEKS - 1) * 7);
+
+    let planned = 0, cleared = 0;
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      const key = toDateKey(cursor);
+      const pct = computeDayCompletion(key); // null when nothing was planned
+      const cell = document.createElement("span");
+      cell.className = "heat-cell";
+      if (pct === null) {
+        cell.classList.add("empty");
+        cell.title = `${formatDateDisplay(key)} — nothing planned`;
+      } else {
+        planned++;
+        if (pct === 100) cleared++;
+        // Four steps rather than a continuous ramp: at this size a smooth
+        // gradient is indistinguishable, while steps stay tellable apart.
+        const level = pct === 0 ? 1 : pct < 50 ? 2 : pct < 100 ? 3 : 4;
+        cell.classList.add("lv" + level);
+        cell.title = `${formatDateDisplay(key)} — ${pct}% done`;
+      }
+      el.insightHeatmap.appendChild(cell);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    el.insightHeatmapSummary.textContent = planned
+      ? `${cleared} of ${planned} planned days finished clean.`
+      : "Nothing logged yet.";
+  }
+
+  // ---------- Backup nudge ----------
+  // Everything lives in this browser. Cloud sync is a mirror, not a backup: a
+  // delete syncs too, and a cleared site data takes both. This only counts an
+  // exported file as a backup.
+  const BACKUP_STALE_DAYS = 30;
+  function lastBackupAt() {
+    try { return Number(localStorage.getItem(LAST_BACKUP_KEY)) || 0; } catch (e) { return 0; }
+  }
+  function markBackedUp() {
+    try {
+      localStorage.setItem(LAST_BACKUP_KEY, String(Date.now()));
+      localStorage.removeItem(BACKUP_SNOOZE_KEY);
+    } catch (e) { /* the nudge is a convenience, not worth failing an export */ }
+    renderBackupNudge();
+  }
+  function backupSnoozedUntil() {
+    try { return Number(localStorage.getItem(BACKUP_SNOOZE_KEY)) || 0; } catch (e) { return 0; }
+  }
+  function renderBackupNudge() {
+    const dayMs = 86400000;
+    // Nothing to lose yet, so nothing to nag about.
+    if (tasks.length < 5 || Date.now() < backupSnoozedUntil()) {
+      el.backupNudge.hidden = true;
+      return;
+    }
+    const last = lastBackupAt();
+    const days = last ? Math.floor((Date.now() - last) / dayMs) : null;
+    if (days !== null && days < BACKUP_STALE_DAYS) {
+      el.backupNudge.hidden = true;
+      return;
+    }
+    const photos = tasks.filter((t) => t.photo).length;
+    const what = `${tasks.length} task${tasks.length === 1 ? "" : "s"}`
+      + (photos ? ` and ${photos} photo${photos === 1 ? "" : "s"}` : "");
+    el.backupNudgeText.textContent = days === null
+      ? `No backup yet — ${what} live only in this browser.`
+      : `Last backup was ${days} days ago — ${what} live only in this browser.`;
+    el.backupNudge.hidden = false;
+  }
+  el.backupNudgeBtn.addEventListener("click", () => exportTasksJson());
+  el.backupNudgeDismiss.addEventListener("click", () => {
+    try { localStorage.setItem(BACKUP_SNOOZE_KEY, String(Date.now() + 7 * 86400000)); } catch (e) { /* ignore */ }
+    renderBackupNudge();
+  });
+
+  // ---------- Workload ----------
+  // Only timed tasks count: an untimed one carries no claim on the clock, and
+  // guessing a duration for it would invent a number the user never entered.
+  const WORKLOAD_HEAVY_MINUTES = 10 * 60;
+  function minutesBetween(startHHMM, endHHMM) {
+    const [sh, sm] = startHHMM.split(":").map(Number);
+    const [eh, em] = endHHMM.split(":").map(Number);
+    return (eh * 60 + em) - (sh * 60 + sm);
+  }
+  function plannedMinutesOn(dateKey, ignoreTaskId) {
+    return tasksForDate(dateKey).reduce((sum, t) => {
+      if (t.id === ignoreTaskId || !t.time || !t.endTime) return sum;
+      const m = minutesBetween(t.time, t.endTime);
+      return sum + (m > 0 ? m : 0);
+    }, 0);
+  }
+  function formatHours(mins) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (!h) return `${m}m`;
+    return m ? `${h}h ${m}m` : `${h}h`;
+  }
+  // Live in the form, because the moment to notice an overloaded day is while
+  // you are still choosing when to do the work.
+  function renderWorkloadHint() {
+    const dateKey = el.taskDate.value || selectedDate;
+    const others = plannedMinutesOn(dateKey, editingTask ? editingTask.id : null);
+    const mine = el.taskTime.value && el.taskEndTime.value
+      ? Math.max(0, minutesBetween(el.taskTime.value, el.taskEndTime.value)) : 0;
+    const totalTasks = tasksForDate(dateKey).filter((t) => !editingTask || t.id !== editingTask.id).length;
+    if (!others && !mine) { el.workloadHint.hidden = true; return; }
+    const total = others + mine;
+    const heavy = total > WORKLOAD_HEAVY_MINUTES;
+    el.workloadHint.classList.toggle("is-heavy", heavy);
+    el.workloadHint.textContent = mine
+      ? `${formatDateDisplay(dateKey)}: ${formatHours(others)} already planned + ${formatHours(mine)} here = ${formatHours(total)}`
+        + (heavy ? " — that is a long day." : "")
+      : `${formatDateDisplay(dateKey)} already has ${formatHours(others)} planned across ${totalTasks} item${totalTasks === 1 ? "" : "s"}.`
+        + (heavy ? " That is a long day." : "");
+    el.workloadHint.hidden = false;
+  }
+
   // ---------- Week view ----------
   function renderWeekView() {
     el.weekView.innerHTML = "";
@@ -2330,7 +2485,8 @@
     const catChip = document.createElement("span");
     catChip.className = "task-cat-chip";
     catChip.style.background = cat.color;
-    catChip.textContent = cat.label;
+    catChip.innerHTML = iconSvg(categoryIcon(task.category));
+    catChip.appendChild(document.createTextNode(cat.label));
     meta.appendChild(catChip);
     if (task.tag) {
       const tagChip = document.createElement("span");
@@ -2635,6 +2791,7 @@
     const todayDone = todayList.filter((t) => isDoneOn(t, todayKey)).length;
     const todayLeft = todayList.length - todayDone;
     renderHomeGreeting({ overdue: overdue.length, todayLeft, todayTotal: todayList.length, upcoming: upcoming.length });
+    renderBackupNudge();
 
     el.homeStats.innerHTML = "";
     const stats = [
@@ -2837,7 +2994,8 @@
     const catChip = document.createElement("span");
     catChip.className = "task-cat-chip";
     catChip.style.background = cat.color;
-    catChip.textContent = cat.label;
+    catChip.innerHTML = iconSvg(categoryIcon(task.category));
+    catChip.appendChild(document.createTextNode(cat.label));
     meta.appendChild(catChip);
     if (showTag && task.tag) {
       const tagChip = document.createElement("span");
@@ -2946,6 +3104,7 @@
   }
 
   function updateInsights() {
+    renderHeatmap();
     const todayKey = toDateKey(today);
     const todayList = tasksForDate(todayKey);
     const done = todayList.filter((t) => isDoneOn(t, todayKey)).length;
@@ -3991,16 +4150,21 @@
       return Object.assign({}, t, { photo: blob ? await blobToDataUrl(blob) : "" });
     }));
   }
-  el.menuExportJson.addEventListener("click", async () => {
+  async function exportTasksJson() {
     closeMoreMenu();
     try {
       const payload = await tasksForExport();
       downloadBlob(`daily-log-export-${toDateKey(today)}.json`, JSON.stringify(payload, null, 2), "application/json");
+      // Only an exported file counts as a backup, so this is the one place
+      // that clears the nudge.
+      markBackedUp();
+      showSnackbar("Backup file saved");
     } catch (e) {
       console.error("export failed", e);
       showSnackbar("Could not build the export file");
     }
-  });
+  }
+  el.menuExportJson.addEventListener("click", exportTasksJson);
   el.menuExportCsv.addEventListener("click", () => {
     closeMoreMenu();
     const headers = ["title", "category", "priority", "tag", "date", "time", "end_time", "repeat", "done", "notes"];
@@ -4218,6 +4382,7 @@
         target.display.textContent = formatDateDisplay(key);
         if (target.onPick) target.onPick();
         closeDatePicker();
+        renderWorkloadHint();
       });
       el.dpGrid.appendChild(btn);
     }
@@ -4253,6 +4418,7 @@
     syncRepeatFields();
   });
   el.repeatEvery.addEventListener("input", renderRepeatEveryHint);
+  el.taskDate.addEventListener("change", renderWorkloadHint);
   el.repeatUntilClear.addEventListener("click", () => {
     el.repeatUntil.value = "";
     el.repeatUntilDisplay.textContent = "No end date";
@@ -4376,6 +4542,7 @@
       display.textContent = formatTimeDisplay(input.value);
     }
     closeTimePicker();
+    renderWorkloadHint();
   });
   el.tpClear.addEventListener("click", () => {
     const input = timeInputFor(tpTarget);
@@ -4383,6 +4550,7 @@
     input.value = "";
     display.textContent = "No time set";
     closeTimePicker();
+    renderWorkloadHint();
   });
 
   // ---------- Templates (modal) ----------
@@ -4574,6 +4742,16 @@
       swatch.addEventListener("click", () => cycleCategoryColor(c.key));
       row.appendChild(swatch);
 
+      const icon = document.createElement("button");
+      icon.type = "button";
+      icon.className = "category-icon-btn";
+      icon.innerHTML = iconSvg(categoryIcon(c.key));
+      icon.style.color = c.color;
+      icon.setAttribute("aria-label", `Change the icon for ${c.label}`);
+      icon.title = "Tap to change the icon";
+      icon.addEventListener("click", () => cycleCategoryIcon(c.key));
+      row.appendChild(icon);
+
       const name = document.createElement("input");
       name.type = "text";
       name.className = "category-name";
@@ -4615,6 +4793,15 @@
 
       el.categoryList.appendChild(row);
     });
+  }
+  function cycleCategoryIcon(key) {
+    const c = categories.find((x) => x.key === key);
+    if (!c) return;
+    const i = CATEGORY_ICONS.indexOf(categoryIcon(key));
+    c.icon = CATEGORY_ICONS[(i + 1) % CATEGORY_ICONS.length];
+    saveCategories();
+    renderCategoryList();
+    renderAll();
   }
   function cycleCategoryColor(key) {
     const c = categories.find((x) => x.key === key);
@@ -4678,7 +4865,12 @@
       return;
     }
     // New ones go above Other, which stays the last resort at the bottom.
-    const cat = { key: categoryKeyFrom(label), label, color: CATEGORY_SWATCHES[categories.length % CATEGORY_SWATCHES.length] };
+    const cat = {
+      key: categoryKeyFrom(label),
+      label,
+      color: CATEGORY_SWATCHES[categories.length % CATEGORY_SWATCHES.length],
+      icon: CATEGORY_ICONS[categories.length % CATEGORY_ICONS.length],
+    };
     const at = categories.findIndex((c) => c.key === CATEGORY_FALLBACK);
     if (at === -1) categories.push(cat); else categories.splice(at, 0, cat);
     saveCategories();
@@ -4918,6 +5110,7 @@
     closeDatePicker();
     closeTimePicker();
     showOverlay(el.modalOverlay, el.taskForm);
+    renderWorkloadHint();
     modalSnapshot = modalStateKey();
     pushOverlayState();
     setTimeout(() => el.taskTitle.focus({ preventScroll: true }), 50);
@@ -4951,6 +5144,7 @@
     closeDatePicker();
     closeTimePicker();
     showOverlay(el.modalOverlay, el.taskForm);
+    renderWorkloadHint();
     modalSnapshot = modalStateKey();
     pushOverlayState();
     setTimeout(() => el.taskTitle.focus({ preventScroll: true }), 50);
@@ -5016,6 +5210,7 @@
       hits.push({ label: repeatLabel({ repeat: p.repeat, repeatDays: p.repeatDays, repeatEvery: p.repeatEvery }), tone: "" });
     }
 
+    renderWorkloadHint();
     quickParsed = hits.length ? p : null;
     el.quickParse.hidden = hits.length === 0;
     el.quickParseChips.innerHTML = "";

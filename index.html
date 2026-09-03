@@ -159,6 +159,12 @@
         </div>
 
         <div class="insight-block">
+          <p class="insight-block-title">Last 12 weeks</p>
+          <div class="heatmap" id="insightHeatmap"></div>
+          <p class="insight-sub" id="insightHeatmapSummary">Nothing logged yet.</p>
+        </div>
+
+        <div class="insight-block">
           <p class="insight-block-title">Last 7 days</p>
           <div class="insight-sparkline" id="insightSparkline"></div>
           <p class="insight-sub" id="insightWeekSummary">No tasks logged this week yet.</p>
@@ -201,6 +207,12 @@
           <p class="home-greeting-line" id="homeGreeting">Hello</p>
           <p class="home-greeting-sub" id="homeGreetingSub">—</p>
         </header>
+        <div class="backup-nudge" id="backupNudge" hidden>
+          <span class="backup-nudge-icon" data-icon="download"></span>
+          <span class="backup-nudge-text" id="backupNudgeText"></span>
+          <button type="button" id="backupNudgeBtn" class="backup-nudge-btn">Back up now</button>
+          <button type="button" id="backupNudgeDismiss" class="backup-nudge-x" aria-label="Remind me later" data-icon="close"></button>
+        </div>
         <div class="home-stats" id="homeStats"></div>
         <section class="home-section" id="homeOverdueSection" hidden>
           <div class="home-section-head">
@@ -430,6 +442,8 @@
         <button type="button" id="tpDone" class="btn-solid btn-small">Done</button>
       </div>
     </div>
+
+    <p class="workload-hint" id="workloadHint" hidden></p>
 
     <div class="field-row">
       <label>Category
