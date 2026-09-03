@@ -2956,6 +2956,15 @@ body[data-view="month"] .tb-sheet-date { display: none; }
   background: color-mix(in srgb, hsl(var(--tag-hue) 60% 50%) 26%, var(--surface));
   font-weight: 700;
 }
+/* All carries no project colour of its own, so it takes the accent -- the same
+   fill the All in the Category and Priority rows above the grid uses. */
+.month-legend-item.all { padding-left: 11px; }
+.month-legend-item.all.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.month-legend-item.all:not(.active):hover { border-color: var(--accent); }
 .month-legend-dot {
   width: 9px;
   height: 9px;

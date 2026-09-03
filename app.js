@@ -2403,6 +2403,27 @@
     caption.textContent = "CLIENT / PROJECT";
     el.monthLegend.appendChild(caption);
 
+    // An explicit All, like the Category and Priority rows above the grid.
+    // Clearing the filter by clicking the active project again works, but it
+    // is a thing you have to already know; a row of filters with no way back
+    // showing on it reads like a one-way door.
+    const searching = el.searchInput.value.trim();
+    const allBtn = document.createElement("button");
+    allBtn.type = "button";
+    allBtn.className = "month-legend-item all" + (searching ? "" : " active");
+    // No day count on it: the per-project counts overlap wherever two projects
+    // share a day, so any total put here would be either wrong or a third
+    // number that means something else again.
+    allBtn.textContent = "All";
+    allBtn.title = searching ? "Clear the filter and show every project" : "Showing every project";
+    allBtn.addEventListener("click", () => {
+      if (!searching) return;
+      el.searchInput.value = "";
+      searchQuery = "";
+      renderCurrentView();
+    });
+    el.monthLegend.appendChild(allBtn);
+
     rows.forEach((row) => {
       const active = searchQuery.trim().toLowerCase() === row.label.toLowerCase();
       const btn = document.createElement("button");
