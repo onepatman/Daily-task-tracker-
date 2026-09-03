@@ -160,6 +160,13 @@
   let viewYear = today.getFullYear();
   let viewMonth = today.getMonth(); // 0-11
   let selectedDate = toDateKey(today);
+  // Declared before the first loadTasks() call below, which seeds the shape
+  // map: `let` is hoisted into a temporal dead zone, so declaring these down
+  // beside saveTasks() would make that first call throw.
+  const DELETED_KEY = "dailyLog.deleted.v1";
+  const TOMBSTONE_TTL_DAYS = 120;
+  let lastSavedShape = new Map();
+  let deletedTasks = loadTombstones();
   let tasks = loadTasks();
   let templates = loadTemplates();
   // Name printed on the "Prepared by" line. Typed once in the menu and kept, so
@@ -648,6 +655,11 @@
       completions: {},
       notifiedDates: {},
       skipped: {},
+      // Carried through, not dropped: this branch rebuilds the task from
+      // scratch, and losing the change stamp here would make an edit look
+      // older than it is and let a stale copy from another device win the
+      // merge over it.
+      updatedAt: t.updatedAt || 0,
       order: Date.now() + Math.random(),
     };
   }
@@ -655,13 +667,58 @@
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
-      return parsed.map(migrateTask);
+      const list = parsed.map(migrateTask);
+      // Seed the shape map from what was on disk, so the first save of the
+      // session only stamps what actually changed in it.
+      lastSavedShape = new Map(list.map((t) => [t.id, shapeOf(t)]));
+      return list;
     } catch (e) {
       console.error("Could not read saved tasks", e);
       return [];
     }
   }
+  // ---------- Change stamps, for a sync that can actually merge ----------
+  // Every task carries when it last changed, and every delete leaves a dated
+  // tombstone behind. Both are worked out here, by comparing what is about to
+  // be written against what was written last, rather than at each of the forty
+  // places that edit a task -- one forgotten call site would silently make a
+  // change look older than it is, and the merge would throw it away.
+  function loadTombstones() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(DELETED_KEY));
+      return Array.isArray(raw) ? raw.filter((d) => d && d.id && d.at) : [];
+    } catch { return []; }
+  }
+  function pruneTombstones(list) {
+    const cutoff = Date.now() - TOMBSTONE_TTL_DAYS * 86400000;
+    return list.filter((d) => d.at > cutoff);
+  }
+  function shapeOf(task) {
+    // Everything except the stamp itself, so stamping does not look like a
+    // change on the next pass and re-stamp forever.
+    return JSON.stringify(task, (k, v) => (k === "updatedAt" ? undefined : v));
+  }
+  function stampChanges() {
+    const now = Date.now();
+    const seen = new Set();
+    tasks.forEach((t) => {
+      seen.add(t.id);
+      const shape = shapeOf(t);
+      if (!t.updatedAt || lastSavedShape.get(t.id) !== shape) t.updatedAt = now;
+    });
+    // Anything that was in the last save and is not here now was deleted.
+    // An undo re-adds the task with a fresh stamp, which outranks the
+    // tombstone, so undo still works.
+    lastSavedShape.forEach((_, id) => {
+      if (!seen.has(id)) deletedTasks.push({ id, at: now });
+    });
+    lastSavedShape = new Map(tasks.map((t) => [t.id, shapeOf(t)]));
+    deletedTasks = pruneTombstones(deletedTasks);
+    try { localStorage.setItem(DELETED_KEY, JSON.stringify(deletedTasks)); } catch { /* not fatal */ }
+  }
+
   function saveTasks() {
+    stampChanges();
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
     } catch (e) {
@@ -4115,8 +4172,12 @@
       await ensureFirebase();
       const code = generateSyncCode();
       lastPushedAt = Date.now();
+      // tasksForSync, not tasks: this wrote the raw list, photos and all, and
+      // a single attachment is enough to blow Firestore's 1 MiB document cap
+      // and fail the write -- the very thing tasksForSync exists to prevent.
+      // Categories and tombstones were missing from the first write too.
       await fbApi.setDoc(syncDocRef(code), {
-        tasks, templates,
+        tasks: tasksForSync(), templates, categories, deletedTasks,
         updatedAt: fbApi.serverTimestamp(),
         updatedAtLocal: lastPushedAt,
       });
@@ -4144,7 +4205,9 @@
       }
       const data = snap.data();
       applyingRemoteUpdate = true;
-      tasks = mergeRemoteTasks(data.tasks);
+      // Joining merges rather than replaces: whatever is already on this
+      // device is real work, and adopting a code should not throw it away.
+      tasks = mergeRemoteTasks(data.tasks, data.deletedTasks);
       templates = data.templates || [];
       if (Array.isArray(data.categories) && data.categories.length) {
         categories = data.categories;
@@ -4154,6 +4217,7 @@
       }
       saveLocalOnly();
       applyingRemoteUpdate = false;
+      markSyncReady();
       syncCode = code;
       localStorage.setItem(SYNC_CODE_KEY, code);
       subscribeSync();
@@ -4175,11 +4239,14 @@
   function subscribeSync() {
     if (syncUnsub) { syncUnsub(); syncUnsub = null; }
     syncUnsub = fbApi.onSnapshot(syncDocRef(syncCode), (snap) => {
-      if (!snap.exists()) return;
+      // An empty document is still an answer: there is nothing to merge, so
+      // this device is up to date and may push. Returning early here left
+      // syncReady false forever and silently stopped syncing altogether.
+      if (!snap.exists()) { markSyncReady(); return; }
       const data = snap.data();
-      if (data.updatedAtLocal === lastPushedAt) { syncStatus = "synced"; renderSyncBody(); return; }
+      if (data.updatedAtLocal === lastPushedAt) { markSyncReady(); syncStatus = "synced"; renderSyncBody(); return; }
       applyingRemoteUpdate = true;
-      tasks = mergeRemoteTasks(data.tasks);
+      tasks = mergeRemoteTasks(data.tasks, data.deletedTasks);
       templates = data.templates || [];
       if (Array.isArray(data.categories) && data.categories.length) {
         categories = data.categories;
@@ -4189,6 +4256,7 @@
       }
       saveLocalOnly();
       applyingRemoteUpdate = false;
+      markSyncReady();
       renderAll();
       syncStatus = "synced";
       renderSyncBody();
@@ -4209,17 +4277,91 @@
   function tasksForSync() {
     return tasks.map((t) => (t.photo ? Object.assign({}, t, { photo: "" }) : t));
   }
-  // A remote copy has no photos in it, so a naive overwrite would strip the
-  // attachments off this device's own tasks. Keep what is already here.
-  function mergeRemoteTasks(remote) {
+  // A real merge, by task.
+  //
+  // This used to return the remote list and nothing else, which made every
+  // sync a whole-list overwrite: any task this device had and the other one
+  // did not was dropped without a trace. Combined with the startup race below,
+  // opening the app on a phone that had not seen the last few days of work was
+  // enough to delete that work everywhere.
+  //
+  // Now the two lists are unioned by id. Where both sides have a task the
+  // newer stamp wins; where only one side has it, it is kept -- unless a
+  // tombstone says it was deleted after it was last edited. Photos never
+  // travel (see tasksForSync), so a remote copy's empty photo must not
+  // overwrite the local reference.
+  function mergeRemoteTasks(remote, remoteDeleted) {
+    const byId = new Map();
     const localPhotos = new Map(tasks.filter((t) => t.photo).map((t) => [t.id, t.photo]));
-    return (remote || []).map(migrateTask).map((t) => {
-      if (!t.photo && localPhotos.has(t.id)) t.photo = localPhotos.get(t.id);
-      return t;
+
+    tasks.forEach((t) => byId.set(t.id, t));
+    (remote || []).map(migrateTask).forEach((r) => {
+      const mine = byId.get(r.id);
+      if (!mine) { byId.set(r.id, r); return; }
+      // No stamp at all means the task predates this scheme; treat it as older
+      // than anything stamped, and fall back to keeping the local copy when
+      // neither side knows.
+      const rAt = r.updatedAt || 0;
+      const mAt = mine.updatedAt || 0;
+      byId.set(r.id, rAt > mAt ? r : mine);
     });
+
+    deletedTasks = pruneTombstones(deletedTasks.concat(
+      (remoteDeleted || []).filter((d) => d && d.id && d.at)));
+    const graves = new Map();
+    deletedTasks.forEach((d) => {
+      if (!graves.has(d.id) || graves.get(d.id) < d.at) graves.set(d.id, d.at);
+    });
+    try { localStorage.setItem(DELETED_KEY, JSON.stringify(deletedTasks)); } catch { /* not fatal */ }
+
+    const merged = [];
+    byId.forEach((t, id) => {
+      const buried = graves.get(id);
+      if (buried && buried >= (t.updatedAt || 0)) return;   // deleted after its last edit
+      if (!t.photo && localPhotos.has(id)) t.photo = localPhotos.get(id);
+      merged.push(t);
+    });
+    // The shape map has to follow the merge, or the next save would read every
+    // task that arrived from the other device as a local edit and re-stamp it.
+    lastSavedShape = new Map(merged.map((t) => [t.id, shapeOf(t)]));
+    return merged;
   }
+  // Nothing may be pushed until this device has seen what is already in the
+  // cloud. Resuming sync on load is asynchronous -- the Firebase SDK is
+  // fetched, then the first snapshot arrives -- but checkReminders() runs
+  // immediately and the photo migration runs right after the first paint, and
+  // either can save. A save in that window used to push this device's stale
+  // list straight over everyone else's newer work.
+  let syncReady = false;
+  let pushQueuedWhileWaiting = false;
+  function markSyncReady() {
+    if (syncReady) return;
+    syncReady = true;
+    if (pushQueuedWhileWaiting) {
+      pushQueuedWhileWaiting = false;
+      pushSyncUpdate();
+    }
+  }
+
+  // A deliberate, opt-in seam. The merge below is the code that lost a month
+  // of work when it was a plain overwrite, and it is unreachable from the UI
+  // without a live Firestore connection -- which a test cannot stand up. This
+  // exposes it only when the flag is set by hand, so nothing is reachable in
+  // an ordinary session.
+  if (localStorage.getItem("dailyLog.testHooks") === "1") {
+    window.dailyLogSyncInternals = {
+      merge: (remote, remoteDeleted) => mergeRemoteTasks(remote, remoteDeleted),
+      setTasks: (list) => { tasks = list; },
+      getTasks: () => tasks,
+      getDeleted: () => deletedTasks,
+      isSyncReady: () => syncReady,
+      pushWasQueued: () => pushQueuedWhileWaiting,
+    };
+  }
+
   function pushSyncUpdate() {
     if (!syncCode || applyingRemoteUpdate) return;
+    if (!syncReady) { pushQueuedWhileWaiting = true; return; }
     ensureFirebase().then(() => {
       clearTimeout(pushDebounceTimer);
       pushDebounceTimer = setTimeout(async () => {
@@ -4231,6 +4373,7 @@
           // push-notifications feature).
           await fbApi.setDoc(syncDocRef(syncCode), {
             tasks: tasksForSync(), templates, categories,
+            deletedTasks,
             updatedAt: fbApi.serverTimestamp(),
             updatedAtLocal: lastPushedAt,
           }, { merge: true });
