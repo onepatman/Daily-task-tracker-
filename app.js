@@ -287,6 +287,7 @@
     weekView: document.getElementById("weekView"),
     monthView: document.getElementById("monthView"),
     monthDragHint: document.getElementById("monthDragHint"),
+    monthLegend: document.getElementById("monthLegend"),
     insightHeatmap: document.getElementById("insightHeatmap"),
     insightHeatmapSummary: document.getElementById("insightHeatmapSummary"),
     backupNudge: document.getElementById("backupNudge"),
@@ -2220,8 +2221,19 @@
   // entirely. Chips are coloured by CLIENT/PROJECT rather than by category --
   // over a month the useful question is whose work the time went to, not
   // work-versus-personal. Untagged tasks fall back to their category colour.
-  const MONTH_CHIPS_PER_DAY = 3;
+  // How many chips a day cell shows before collapsing the rest into "+N more".
+  // Three was a phone-sized number applied to every screen, which left a desk
+  // monitor showing "+2 more" in cells with room to spare. The cap follows the
+  // space actually available instead.
+  function monthChipsPerDay() {
+    if (window.innerWidth >= 1100 && window.innerHeight >= 900) return 6;
+    if (window.innerWidth >= 1100) return 5;
+    if (window.innerWidth >= 760) return 4;
+    return 3;
+  }
   function renderMonthView() {
+    const MONTH_CHIPS_PER_DAY = monthChipsPerDay();
+    monthChipCapDrawn = MONTH_CHIPS_PER_DAY;
     if (!el.monthWeekdays.childElementCount) {
       DAY_NAMES.forEach((d) => {
         const s = document.createElement("span");
@@ -2315,22 +2327,35 @@
           label.className = "month-chip-label";
           label.textContent = spanLabel ? t.title : "";
           chip.appendChild(label);
+          // Repeating tasks are deliberately left un-draggable: their start
+          // date defines the whole series, so nudging one chip would silently
+          // move every occurrence, which is not what dragging a bar looks like
+          // it does.
+          if (t.repeat === "none") {
+            chip.classList.add("draggable");
+            chip.dataset.taskId = t.id;
+            if (isMultiDay(t)) {
+              if (key === t.startDate) chip.appendChild(makeSpanGrip("start"));
+              if (key === taskEndDate(t)) chip.appendChild(makeSpanGrip("end"));
+            }
+          }
           chips.appendChild(chip);
         });
         if (list.length > MONTH_CHIPS_PER_DAY) {
           const more = document.createElement("span");
+          // Styled as something you press, because it is: the click bubbles to
+          // the cell, which opens that day's sheet with the full list. It used
+          // to read as a plain caption, so the items behind it looked lost
+          // rather than one tap away.
           more.className = "month-more";
           more.textContent = `+${list.length - MONTH_CHIPS_PER_DAY} more`;
+          more.title = `Open ${formatDateDisplay(key)} to see all ${list.length} items`;
           chips.appendChild(more);
         }
         cell.appendChild(chips);
       }
 
       cell.addEventListener("click", () => {
-        // A drag that ended on this cell already did its work by opening the
-        // form; the click the browser sends afterwards must not also select
-        // the day and open its detail sheet on top.
-        if (monthDragConsumedClick) { monthDragConsumedClick = false; return; }
         selectedDate = key;
         // Selecting a day outside the current month follows it, the way the
         // sidebar calendar does, rather than leaving the grid on a month the
@@ -2342,7 +2367,92 @@
       el.monthGrid.appendChild(cell);
     }
     paintMonthDragRange();
+    renderMonthLegend(year, month, daysInMonth);
   }
+
+  // ---------- Month legend: whose month was it? ----------
+  // Chips are already coloured per client/project, but a colour with no key is
+  // only decoration. This counts the DAYS each project touched -- not the
+  // number of items -- because that is the question a month view is being
+  // asked: where did the time go. A five-day run is five days here, and two
+  // items on one day are one.
+  //
+  // Built from the unfiltered month, so it stays a fixed picture to navigate
+  // by rather than collapsing to a single row the moment one is clicked.
+  function renderMonthLegend(year, month, daysInMonth) {
+    const byTag = new Map();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const key = toDateKey(new Date(year, month, day));
+      const seen = new Set();
+      tasksForDate(key).forEach((t) => {
+        const tag = (t.tag || "").trim();
+        if (!tag || seen.has(tag.toLowerCase())) return;
+        seen.add(tag.toLowerCase());
+        const slot = byTag.get(tag.toLowerCase());
+        if (slot) { slot.days++; }
+        else byTag.set(tag.toLowerCase(), { label: tag, days: 1 });
+      });
+    }
+    const rows = [...byTag.values()].sort((a, b) => b.days - a.days || a.label.localeCompare(b.label));
+    el.monthLegend.innerHTML = "";
+    el.monthLegend.hidden = rows.length === 0;
+    if (!rows.length) return;
+
+    const caption = document.createElement("span");
+    caption.className = "month-legend-caption";
+    caption.textContent = "CLIENT / PROJECT";
+    el.monthLegend.appendChild(caption);
+
+    rows.forEach((row) => {
+      const active = searchQuery.trim().toLowerCase() === row.label.toLowerCase();
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "month-legend-item" + (active ? " active" : "");
+      applyTagColor(btn, row.label);
+      btn.title = active
+        ? `Showing only ${row.label} — click to clear`
+        : `Show only ${row.label} across the calendar`;
+      const dot = document.createElement("span");
+      dot.className = "month-legend-dot";
+      btn.appendChild(dot);
+      const name = document.createElement("span");
+      name.className = "month-legend-name";
+      name.textContent = row.label;
+      btn.appendChild(name);
+      const days = document.createElement("span");
+      days.className = "month-legend-days";
+      days.textContent = row.days === 1 ? "1 day" : `${row.days} days`;
+      btn.appendChild(days);
+      // Reuses the search box rather than inventing a second filter, so the
+      // chip row, the badge and every other view agree with what the legend
+      // says is showing.
+      btn.addEventListener("click", () => {
+        el.searchInput.value = active ? "" : row.label;
+        searchQuery = el.searchInput.value;
+        renderCurrentView();
+      });
+      el.monthLegend.appendChild(btn);
+    });
+  }
+
+  function makeSpanGrip(edge) {
+    const grip = document.createElement("span");
+    grip.className = "span-grip " + edge;
+    grip.dataset.edge = edge;
+    return grip;
+  }
+
+  // The chip cap is read from the window, so a resize has to redraw the grid or
+  // a widened window keeps showing "+2 more" in cells that now have the room.
+  let monthResizeTimer = 0;
+  let monthChipCapDrawn = 0;
+  window.addEventListener("resize", () => {
+    if (currentView !== "month") return;
+    clearTimeout(monthResizeTimer);
+    monthResizeTimer = setTimeout(() => {
+      if (currentView === "month" && monthChipsPerDay() !== monthChipCapDrawn) renderMonthView();
+    }, 150);
+  });
 
   // ---------- Month drag-select ----------
   // Dragging across the grid picks a run of days and opens the form with the
@@ -2357,6 +2467,25 @@
   const MONTH_DRAG_SLOP_PX = 10;
   let monthDrag = null;
   let monthDragConsumedClick = false;
+
+  // A drag ends with a pointer-up, and the browser then sends a click to
+  // whatever is under the pointer -- which would select that day and open its
+  // sheet on top of the work the drag just did. That one click is swallowed in
+  // the capture phase, before it can reach the cell. Doing it this way rather
+  // than by ignoring clicks for a slice of time matters: a time window also
+  // eats a real click made a moment after a drag, which is exactly what a user
+  // correcting themselves does.
+  el.monthGrid.addEventListener("click", (e) => {
+    if (!monthDragConsumedClick) return;
+    monthDragConsumedClick = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
+  // If a drag is released off the grid no click ever arrives to be swallowed,
+  // so the flag would sit armed and eat the next real one. Every interaction
+  // starts by disarming it; its own pointer-up re-arms it if it turns out to
+  // have been a drag.
+  el.monthGrid.addEventListener("pointerdown", () => { monthDragConsumedClick = false; }, true);
 
   function monthCellAt(x, y) {
     const hit = document.elementFromPoint(x, y);
@@ -2395,10 +2524,7 @@
     monthDrag = null;
     paintMonthDragRange();
     if (!wasActive) return;
-    // The click that follows a mouse-up belongs to the drag, not to the day
-    // under the cursor.
     monthDragConsumedClick = true;
-    setTimeout(() => { monthDragConsumedClick = false; }, 400);
     if (commit && range && range.to > range.from) {
       selectedDate = range.from;
       openCreateModal({ startDate: range.from, endDate: range.to });
@@ -2406,6 +2532,13 @@
   }
   el.monthGrid.addEventListener("pointerdown", (e) => {
     if (e.button != null && e.button !== 0) return;
+    // Chips are objects, the space around them is canvas. A drag that starts
+    // on a chip is about that task -- moving it, or nothing at all if it is a
+    // repeat -- and must never quietly turn into "select these days" instead.
+    // Checked here rather than by stopping propagation, because both handlers
+    // sit on the same element and propagation between them would depend on
+    // registration order.
+    if (e.target.closest && e.target.closest(".month-chip")) return;
     const cell = e.target.closest && e.target.closest(".month-cell");
     if (!cell) return;
     const coarse = e.pointerType !== "mouse" && e.pointerType !== "pen";
@@ -2459,6 +2592,140 @@
   }, { passive: false });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && monthDrag) endMonthDrag(false);
+  });
+
+  // ---------- Month: move and resize a task in place ----------
+  // A schedule slips. Re-dating a job meant opening the form and picking dates
+  // out of a picker, twice for a run -- so the bar is now the control: drag its
+  // middle to move the whole thing, drag either end to stretch or shorten it.
+  //
+  // The preview is the real thing: the task's own dates are moved while
+  // dragging and the grid redrawn from them, so what is on screen is exactly
+  // what will be saved, bars and overdue colouring included. Nothing is written
+  // to storage until the pointer is released, and letting go anywhere but on
+  // the grid -- or pressing Escape -- puts the original dates back.
+  let monthChipDrag = null;
+
+  function daysBetweenKeys(a, b) {
+    return Math.round((parseDateKey(b) - parseDateKey(a)) / 86400000);
+  }
+  function applyChipDrag() {
+    const d = monthChipDrag;
+    const t = d.task;
+    const origEnd = d.origEnd && d.origEnd > d.origStart ? d.origEnd : d.origStart;
+    if (d.mode === "move") {
+      t.startDate = qaShiftFrom(d.origStart, d.delta);
+      t.endDate = d.origEnd ? qaShiftFrom(origEnd, d.delta) : "";
+    } else if (d.mode === "start") {
+      // Dragged past its own far end, a run collapses to a single day rather
+      // than inverting into a range that shows up nowhere.
+      const moved = qaShiftFrom(d.origStart, d.delta);
+      t.startDate = moved > origEnd ? origEnd : moved;
+      t.endDate = origEnd > t.startDate ? origEnd : "";
+    } else {
+      const moved = qaShiftFrom(origEnd, d.delta);
+      t.startDate = d.origStart;
+      t.endDate = moved > d.origStart ? moved : "";
+    }
+    renderMonthView();
+    const end = taskEndDate(t);
+    const days = spanDayCount({ startDate: t.startDate, endDate: end });
+    el.monthDragHint.textContent = end > t.startDate
+      ? `${t.title} · ${formatDateDisplay(t.startDate)} → ${formatDateDisplay(end)} · ${days} days`
+      : `${t.title} · ${formatDateDisplay(t.startDate)}`;
+    el.monthDragHint.hidden = false;
+  }
+  function endChipDrag(commit) {
+    if (!monthChipDrag) return;
+    const d = monthChipDrag;
+    clearTimeout(d.holdTimer);
+    const wasActive = d.active;
+    const moved = d.task.startDate !== d.origStart || (d.task.endDate || "") !== (d.origEnd || "");
+    monthChipDrag = null;
+    el.monthDragHint.hidden = true;
+    if (!commit || !wasActive || !moved) {
+      d.task.startDate = d.origStart;
+      d.task.endDate = d.origEnd;
+      if (wasActive) renderMonthView();
+      return;
+    }
+    monthDragConsumedClick = true;
+    const revert = { start: d.origStart, end: d.origEnd, task: d.task };
+    saveTasks();
+    renderAll();
+    const end = taskEndDate(revert.task);
+    showSnackbar(
+      end > revert.task.startDate
+        ? `"${revert.task.title}" now runs ${formatDateDisplay(revert.task.startDate)} → ${formatDateDisplay(end)}`
+        : `"${revert.task.title}" moved to ${formatDateDisplay(revert.task.startDate)}`,
+      () => {
+        revert.task.startDate = revert.start;
+        revert.task.endDate = revert.end;
+        saveTasks();
+        renderAll();
+      }
+    );
+  }
+  el.monthGrid.addEventListener("pointerdown", (e) => {
+    if (e.button != null && e.button !== 0) return;
+    const chip = e.target.closest && e.target.closest(".month-chip.draggable");
+    if (!chip) return;
+    const task = tasks.find((t) => t.id === chip.dataset.taskId);
+    if (!task) return;
+    const grip = e.target.closest(".span-grip");
+    const cell = chip.closest(".month-cell");
+    const coarse = e.pointerType !== "mouse" && e.pointerType !== "pen";
+    monthChipDrag = {
+      task,
+      mode: grip ? grip.dataset.edge : "move",
+      anchor: cell.dataset.dateKey,
+      origStart: task.startDate,
+      origEnd: task.endDate || "",
+      delta: 0,
+      active: false,
+      coarse,
+      startX: e.clientX,
+      startY: e.clientY,
+      holdTimer: 0,
+    };
+    if (coarse) {
+      monthChipDrag.holdTimer = setTimeout(() => {
+        if (!monthChipDrag) return;
+        monthChipDrag.active = true;
+        applyChipDrag();
+        if (navigator.vibrate) navigator.vibrate(15);
+      }, MONTH_DRAG_HOLD_MS);
+    }
+  });
+  el.monthGrid.addEventListener("pointermove", (e) => {
+    if (!monthChipDrag) return;
+    const d = monthChipDrag;
+    if (!d.active) {
+      if (d.coarse) {
+        const slop = Math.abs(e.clientX - d.startX) + Math.abs(e.clientY - d.startY);
+        if (slop > MONTH_DRAG_SLOP_PX) endChipDrag(false);
+        return;
+      }
+      // Not a drag until the pointer reaches another day, so tapping a chip
+      // still just opens the day it is on.
+      const over = monthCellAt(e.clientX, e.clientY);
+      if (!over || over.dataset.dateKey === d.anchor) return;
+      d.active = true;
+    }
+    const over = monthCellAt(e.clientX, e.clientY);
+    if (!over) return;
+    const delta = daysBetweenKeys(d.anchor, over.dataset.dateKey);
+    if (delta === d.delta) return;
+    d.delta = delta;
+    applyChipDrag();
+  });
+  document.addEventListener("pointerup", () => endChipDrag(true));
+  document.addEventListener("pointercancel", () => endChipDrag(false));
+  el.monthGrid.addEventListener("touchmove", (e) => {
+    if (monthChipDrag && monthChipDrag.active) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && monthChipDrag) endChipDrag(false);
   });
 
 
