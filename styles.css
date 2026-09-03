@@ -2746,7 +2746,11 @@ html, body {
   .tb-arrow, .tb-icon-btn { width: 46px; height: 46px; font-size: 22px; }
   .tb-select { font-size: 16px; padding: 11px 32px 11px 18px; }
   .tb-sheet-date { font-size: 17px; }
-  .view-tabs-row { padding: 20px 36px 0; max-width: 720px; }
+  /* No max-width here. The 900px tier drops the cap so the sticky bar can
+     occlude what scrolls under it; re-capping it at this tier put the cap
+     straight back on the widest screens -- the ones with the most window
+     beside the bar for the content to show through. Padding only. */
+  .view-tabs-row { padding: 20px 36px 10px; }
   .view-tab { font-size: 16px; padding: 13px 21px; }
   .view-status-badge { font-size: 14px; padding: 11px 17px; }
 
