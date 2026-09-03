@@ -242,6 +242,7 @@
     importFileInput: document.getElementById("importFileInput"),
     viewTabs: document.getElementById("viewTabs"),
     titleblock: document.querySelector(".titleblock"),
+    viewTabsRow: document.querySelector(".view-tabs-row"),
     selectModeBtn: document.getElementById("selectModeBtn"),
     bulkBar: document.getElementById("bulkBar"),
     bulkBarCount: document.getElementById("bulkBarCount"),
@@ -1398,19 +1399,25 @@
     if (!el.timePickerPopover.hidden && !path.includes(el.taskTimeBtn) && !path.includes(el.taskEndTimeBtn) && !path.includes(el.timePickerPopover)) closeTimePicker();
   });
 
-  // The tabs row sticks directly beneath the title block in Month view, so it
-  // needs that block's height as its own offset. Measured rather than written
-  // into the stylesheet as a number: the block grows when the sync pill
-  // appears, when the text-size setting is raised, and at the wide
-  // breakpoints, and a stale constant would leave a gap or a covered row.
+  // Three things stack down the left of a desktop window: the title block, the
+  // tabs row beneath it, and the sidebar beneath both. Each needs the height of
+  // what is above it. Measured rather than written into the stylesheet as
+  // numbers -- the heights change with the text-size setting, the sync pill,
+  // the count badge wrapping and the wide breakpoints, and a stale constant
+  // would leave either a gap or a row hidden behind the one above it.
   function syncTopbarOffset() {
-    document.documentElement.style.setProperty(
-      "--topbar-offset", el.titleblock.offsetHeight + "px");
+    const head = el.titleblock.offsetHeight;
+    const tabs = el.viewTabsRow.offsetHeight;
+    const root = document.documentElement.style;
+    root.setProperty("--topbar-offset", head + "px");
+    root.setProperty("--sticky-stack", (head + tabs) + "px");
   }
   syncTopbarOffset();
   if (window.ResizeObserver) {
     // Catches every cause at once, including the ones no event would report.
-    new ResizeObserver(syncTopbarOffset).observe(el.titleblock);
+    const ro = new ResizeObserver(syncTopbarOffset);
+    ro.observe(el.titleblock);
+    ro.observe(el.viewTabsRow);
   } else {
     window.addEventListener("resize", syncTopbarOffset);
   }

@@ -2624,10 +2624,12 @@ html, body {
 
   .app-sidebar {
     position: sticky;
-    top: 20px;
+    /* Below the sticky headers, not under them: at a flat 20px the calendar's
+       own top would sit behind the tabs bar and be unreachable. */
+    top: calc(var(--sticky-stack, 0px) + 20px);
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - 40px);
+    max-height: calc(100vh - var(--sticky-stack, 0px) - 40px);
     overflow-y: auto;
     scrollbar-width: thin;
   }
@@ -2647,18 +2649,48 @@ html, body {
   .app-main .week-view { margin: 14px 0 0; }
   .app-main .timeline-view { margin: 14px 0 0; }
 
-  .view-tabs-row {
-    /* The desktop dashboard already has its own sticky sidebar (calendar
-       etc.); stacking a second sticky element here would fight it for the
-       same top-of-viewport space, so this row just scrolls normally. */
-    position: static;
-    padding: 18px 28px 10px;
-    /* Sized to hold every tab on one line -- at 520px the sixth (Board) was
-       pushed under the scroll edge and read as a broken, clipped label. */
-    max-width: 600px;
-    background: none;
-    border-bottom: none;
+  /* The title block and the tabs hold still while the content scrolls under
+     them. This row used to be static here, on the grounds that the sidebar is
+     already sticky and a second sticky element would fight it for the same
+     top-of-viewport space. The sidebar does hold the calendar, but it does not
+     hold the tabs, the search box or the month arrows -- so in Board, where
+     the page runs to several thousand pixels, all three were gone the moment
+     you started scrolling, and Month has no sidebar at all.
+
+     They stack instead of fighting: the tabs sit at the title block's measured
+     height, and the sidebar starts below both. */
+  .titleblock {
+    position: sticky;
+    top: 0;
+    /* The lists and grid contain positioned elements and come later in the
+       document, so without a stacking order of their own these headers would
+       be scrolled straight over. */
+    z-index: 21;
+    /* Opaque: the gradient alone lets the content show through as it passes. */
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), var(--bg);
   }
+  .view-tabs-row {
+    position: sticky;
+    top: var(--topbar-offset, 0px);
+    z-index: 20;
+    padding: 18px 28px 10px;
+    /* Full width. A capped box was fine while this row scrolled with the page
+       -- it kept the six tabs on one line -- but a sticky bar has to occlude
+       what passes underneath, and a 600px bar in a 1400px window leaves the
+       content sliding through the gap beside it. Widening it also puts the
+       count badge on the tabs' own line instead of wrapping it below. */
+    max-width: none;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  /* The tabs take a full-width line of their own so they are never squeezed
+     into ellipsis -- see the note above .view-tabs. At this width, with the
+     row no longer capped at 600px, there is room for the badge beside them,
+     and a sticky bar is worth keeping short: this saves it a whole row. The
+     tabs still keep their natural width and scroll inside themselves if a
+     large text setting makes them outgrow the space, so nothing is squeezed;
+     the badge simply wraps below again, as it does now. */
+  .view-tabs-row .view-tabs { flex: 0 1 auto; }
   .view-tab { font-size: 15px; padding: 12px 17px; }
   .view-status-badge { font-size: 13px; padding: 10px 15px; }
 
@@ -2758,43 +2790,6 @@ body[data-view="month"] .tb-sheet-date { display: none; }
    override has to be repeated at each breakpoint that sets two columns. */
 @media (min-width: 900px) {
   body[data-view="month"] .app-body { grid-template-columns: 1fr; }
-
-  /* On desktop the tabs row is static because the sidebar is sticky and two
-     sticky headers would fight for the same space. That reasoning does not
-     survive into Month view, which hides the sidebar: nothing stayed put, so
-     scrolling down a six-week grid took the month arrows, the year, Jump to
-     today and the ⋮ menu away with it, and changing month meant scrolling all
-     the way back up. Here the title block and the tabs take the sidebar's
-     place as the thing that holds still.
-
-     z-index matters as much as the stickiness: the grid's chips are
-     positioned (they carry the resize grips), and a sticky header with no
-     stacking order of its own comes earlier in the document, so the chips
-     would scroll straight over the top of it. */
-  body[data-view="month"] .titleblock {
-    position: sticky;
-    top: 0;
-    z-index: 21;
-    /* Opaque. The gradient alone lets the grid show through as it passes. */
-    background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), var(--bg);
-  }
-  body[data-view="month"] .view-tabs-row {
-    position: sticky;
-    /* Sits directly under the title block, whose height is measured at
-       runtime -- it changes with the text-size setting, the sync pill and the
-       wide breakpoints, so it cannot be a constant here. */
-    top: var(--topbar-offset, 0px);
-    z-index: 20;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border-soft);
-    /* The desktop rule caps this row at 600px so the six tabs sit on one line
-       and nothing stretches. A capped box is fine while the row scrolls with
-       the page, but as a sticky bar it has to occlude what passes underneath,
-       and 600px of an 1100px window leaves the calendar sliding through the
-       gap beside the tabs. Full width instead -- which also puts the count
-       badge back on the tabs' own line rather than wrapping it below. */
-    max-width: none;
-  }
 }
 
 /* ---------- Multi-day run (task form) ---------- */
