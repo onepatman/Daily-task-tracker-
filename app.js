@@ -4219,8 +4219,11 @@
       applyingRemoteUpdate = false;
       markSyncReady();
       syncCode = code;
+      const joinedAhead = localAheadOfRemote;
       localStorage.setItem(SYNC_CODE_KEY, code);
       subscribeSync();
+      // Same as above: what this device brought to the group has to be sent.
+      if (joinedAhead) pushSyncUpdate();
       renderAll();
     } catch (e) {
       console.error("joinSync failed", e);
@@ -4257,6 +4260,9 @@
       saveLocalOnly();
       applyingRemoteUpdate = false;
       markSyncReady();
+      // The merge may have kept tasks the cloud does not have. Send them on,
+      // or they stay on this device and the other one never learns of them.
+      if (localAheadOfRemote) pushSyncUpdate();
       renderAll();
       syncStatus = "synced";
       renderSyncBody();
@@ -4290,8 +4296,17 @@
   // tombstone says it was deleted after it was last edited. Photos never
   // travel (see tasksForSync), so a remote copy's empty photo must not
   // overwrite the local reference.
+  // Set by the merge when this device held something the cloud did not, so the
+  // caller knows to push the result back. Without it a task that only exists
+  // here stays here: merging adds it locally, but nothing sends it on, so a
+  // task created while offline could sit on one device forever.
+  let localAheadOfRemote = false;
+
   function mergeRemoteTasks(remote, remoteDeleted) {
     const byId = new Map();
+    const remoteIds = new Set((remote || []).map((r) => r && r.id));
+    const remoteGraves = new Set((remoteDeleted || []).map((d) => d && d.id));
+    localAheadOfRemote = false;
     const localPhotos = new Map(tasks.filter((t) => t.photo).map((t) => [t.id, t.photo]));
 
     tasks.forEach((t) => byId.set(t.id, t));
@@ -4303,8 +4318,12 @@
       // neither side knows.
       const rAt = r.updatedAt || 0;
       const mAt = mine.updatedAt || 0;
-      byId.set(r.id, rAt > mAt ? r : mine);
+      if (rAt > mAt) byId.set(r.id, r);
+      else { byId.set(r.id, mine); if (shapeOf(mine) !== shapeOf(r)) localAheadOfRemote = true; }
     });
+    // Anything here that the cloud has never heard of.
+    tasks.forEach((t) => { if (!remoteIds.has(t.id)) localAheadOfRemote = true; });
+    (deletedTasks || []).forEach((d) => { if (!remoteGraves.has(d.id)) localAheadOfRemote = true; });
 
     deletedTasks = pruneTombstones(deletedTasks.concat(
       (remoteDeleted || []).filter((d) => d && d.id && d.at)));
@@ -4355,6 +4374,7 @@
       getTasks: () => tasks,
       getDeleted: () => deletedTasks,
       isSyncReady: () => syncReady,
+      localAhead: () => localAheadOfRemote,
       pushWasQueued: () => pushQueuedWhileWaiting,
     };
   }
