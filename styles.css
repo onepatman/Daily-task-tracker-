@@ -1771,6 +1771,17 @@ html, body {
   white-space: nowrap;
 }
 .more-menu button:hover, .more-menu button:active { background: var(--surface-2); }
+/* Which worker is serving the page. Quiet -- it is a fact to look up when
+   something is wrong, not a thing to read every time the menu opens. */
+.menu-version {
+  margin: 6px 0 2px;
+  padding: 6px 14px 0;
+  border-top: 1px solid var(--border-soft);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+}
 
 .menu-accent-row {
   padding: 8px 10px 10px;
