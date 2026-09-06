@@ -395,7 +395,7 @@
 
     <div class="field-row">
       <label>Date
-        <button type="button" id="taskDateBtn" class="picker-trigger">
+        <button type="button" id="taskDateBtn" class="picker-trigger" data-datepicker>
           <span id="taskDateDisplay">Select date</span>
           <span class="picker-trigger-icon" data-icon="calendar"></span>
         </button>
@@ -410,7 +410,7 @@
       </label>
       <div class="span-until" id="spanUntilRow" hidden>
         <span class="span-until-label">Until</span>
-        <button type="button" id="taskEndDateBtn" class="picker-trigger">
+        <button type="button" id="taskEndDateBtn" class="picker-trigger" data-datepicker>
           <span id="taskEndDateDisplay">Select last day</span>
           <span class="picker-trigger-icon" data-icon="calendar"></span>
         </button>
@@ -421,14 +421,14 @@
 
     <div class="field-row">
       <label>Start time
-        <button type="button" id="taskTimeBtn" class="picker-trigger">
+        <button type="button" id="taskTimeBtn" class="picker-trigger" data-timepicker>
           <span id="taskTimeDisplay">No time set</span>
           <span class="picker-trigger-icon" data-icon="clock"></span>
         </button>
         <input type="hidden" id="taskTime" />
       </label>
       <label>End time
-        <button type="button" id="taskEndTimeBtn" class="picker-trigger">
+        <button type="button" id="taskEndTimeBtn" class="picker-trigger" data-timepicker>
           <span id="taskEndTimeDisplay">No time set</span>
           <span class="picker-trigger-icon" data-icon="clock"></span>
         </button>
@@ -510,7 +510,7 @@
     <div class="field-row" id="repeatUntilField" hidden>
       <label>Repeat until
         <div class="repeat-until-row">
-          <button type="button" id="repeatUntilBtn" class="picker-trigger">
+          <button type="button" id="repeatUntilBtn" class="picker-trigger" data-datepicker>
             <span id="repeatUntilDisplay">No end date</span>
             <span class="picker-trigger-icon" data-icon="calendar"></span>
           </button>
