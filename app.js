@@ -9,7 +9,7 @@
   // network-first, so the page code is whatever the network last served, while
   // the worker is whatever last managed to install. They can disagree, and
   // when they do that is the single most useful thing the menu can say.
-  const APP_VERSION = "v88";
+  const APP_VERSION = "v89";
   const TEXT_SIZE_KEY = "dailyLog.textSize";
   const TEMPLATES_KEY = "dailyLog.templates.v1";
   const FILTERS_KEY = "dailyLog.filters";
@@ -1460,8 +1460,15 @@
     // captured at dispatch time, so it stays valid either way.
     const path = e.composedPath();
     if (!el.moreMenu.hidden && !path.includes(el.moreMenuBtn) && !path.includes(el.moreMenu)) closeMoreMenu();
-    if (!el.datePickerPopover.hidden && !path.includes(el.taskDateBtn) && !path.includes(el.repeatUntilBtn) && !path.includes(el.datePickerPopover)) closeDatePicker();
-    if (!el.timePickerPopover.hidden && !path.includes(el.taskTimeBtn) && !path.includes(el.taskEndTimeBtn) && !path.includes(el.timePickerPopover)) closeTimePicker();
+    // Which buttons open a picker is read off the markup, not listed here by
+    // name. It was listed by name, and the "Until" button added with multi-day
+    // runs never got added to the list -- so its own handler opened the picker
+    // and this one, seeing an unrecognised click, closed it again in the same
+    // event. The button looked dead. Any trigger carrying the attribute is
+    // now spared automatically.
+    const opensPicker = (attr) => path.some((n) => n && n.nodeType === 1 && n.matches && n.matches(attr));
+    if (!el.datePickerPopover.hidden && !opensPicker("[data-datepicker]") && !path.includes(el.datePickerPopover)) closeDatePicker();
+    if (!el.timePickerPopover.hidden && !opensPicker("[data-timepicker]") && !path.includes(el.timePickerPopover)) closeTimePicker();
   });
 
   // Three things stack down the left of a desktop window: the title block, the
