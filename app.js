@@ -309,6 +309,7 @@
     timelineView: document.getElementById("timelineView"),
     boardView: document.getElementById("boardView"),
     boardGroupBar: document.getElementById("boardGroupBar"),
+    menuVersion: document.getElementById("menuVersion"),
     printSheet: document.getElementById("printSheet"),
     printSheetTitle: document.getElementById("printSheetTitle"),
     printPeriod: document.getElementById("printPeriod"),
@@ -6583,6 +6584,39 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("service-worker.js").then((reg) => {
+        // Ask outright, rather than trusting the browser to notice on its own.
+        // Registering the same script is only a hint: an installed app that is
+        // never fully restarted can sit on an old worker for days, which is
+        // exactly how a device stays on a version with a known bug in it while
+        // its owner keeps pressing refresh. Checked on load, and again whenever
+        // the window is brought back to the front, at most every ten minutes.
+        let lastUpdateCheck = 0;
+        const checkForUpdate = () => {
+          if (Date.now() - lastUpdateCheck < 600000) return;
+          lastUpdateCheck = Date.now();
+          reg.update().catch((e) => console.warn("update check failed", e));
+        };
+        checkForUpdate();
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden) checkForUpdate();
+        });
+
+        // Show which worker is actually serving this page, so "am I on the
+        // fixed version?" has an answer that does not depend on guessing
+        // whether a refresh took.
+        navigator.serviceWorker.addEventListener("message", (e) => {
+          if (e.data && e.data.type === "VERSION") {
+            el.menuVersion.textContent = "Version " + String(e.data.version).replace(/^daily-log-/, "");
+          }
+        });
+        const askVersion = () => {
+          if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage("VERSION");
+          }
+        };
+        askVersion();
+        navigator.serviceWorker.addEventListener("controllerchange", askVersion);
+
         function promptUpdate(worker) {
           showSnackbar("A new version is available.", () => {
             worker.postMessage("SKIP_WAITING");

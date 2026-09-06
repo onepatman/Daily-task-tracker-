@@ -1,4 +1,4 @@
-const CACHE_NAME = "daily-log-v86";
+const CACHE_NAME = "daily-log-v87";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -24,6 +24,14 @@ self.addEventListener("install", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data === "SKIP_WAITING") {
     self.skipWaiting();
+  }
+  // Which worker is actually serving this page. The page shows it in the menu:
+  // "is this device on the fixed version?" was unanswerable without it, and
+  // reporting a constant compiled into app.js would answer for the file that
+  // happens to be running rather than for the worker that decides what is
+  // cached -- which is the thing that gets stuck.
+  if (event.data === "VERSION" && event.source) {
+    event.source.postMessage({ type: "VERSION", version: CACHE_NAME });
   }
 });
 
