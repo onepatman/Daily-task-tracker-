@@ -4,6 +4,12 @@
   const STORAGE_KEY = "dailyLog.tasks.v1";
   const THEME_KEY = "dailyLog.theme";
   const ACCENT_KEY = "dailyLog.accent";
+  // The version of THIS file. Bump alongside CACHE_NAME in service-worker.js.
+  // Both are needed and they answer different questions: the fetch strategy is
+  // network-first, so the page code is whatever the network last served, while
+  // the worker is whatever last managed to install. They can disagree, and
+  // when they do that is the single most useful thing the menu can say.
+  const APP_VERSION = "v88";
   const TEXT_SIZE_KEY = "dailyLog.textSize";
   const TEMPLATES_KEY = "dailyLog.templates.v1";
   const FILTERS_KEY = "dailyLog.filters";
@@ -6601,17 +6607,34 @@
           if (!document.hidden) checkForUpdate();
         });
 
-        // Show which worker is actually serving this page, so "am I on the
-        // fixed version?" has an answer that does not depend on guessing
-        // whether a refresh took.
+        // Asking the worker was the whole plan, and it was the wrong plan on
+        // its own: a worker old enough to be a problem is old enough not to
+        // understand the question, so the line sat at "-" in exactly the case
+        // it was built for. The page states its own version outright, and the
+        // worker's is added only when it disagrees -- which is the fault
+        // worth seeing.
+        let workerAnswered = false;
+        const showVersion = (workerVersion) => {
+          let text = "Version " + APP_VERSION;
+          if (workerVersion && workerVersion !== APP_VERSION) text += " · worker " + workerVersion;
+          else if (!workerVersion && navigator.serviceWorker.controller) text += " · worker older";
+          el.menuVersion.textContent = text;
+        };
+        showVersion(null);
         navigator.serviceWorker.addEventListener("message", (e) => {
           if (e.data && e.data.type === "VERSION") {
-            el.menuVersion.textContent = "Version " + String(e.data.version).replace(/^daily-log-/, "");
+            workerAnswered = true;
+            showVersion(String(e.data.version).replace(/^daily-log-/, ""));
           }
         });
         const askVersion = () => {
+          workerAnswered = false;
           if (navigator.serviceWorker.controller) {
             navigator.serviceWorker.controller.postMessage("VERSION");
+            // Silence is an answer too: a worker that cannot reply is old.
+            setTimeout(() => { if (!workerAnswered) showVersion(null); }, 2000);
+          } else {
+            showVersion(APP_VERSION);   // nothing is caching yet, so nothing is stale
           }
         };
         askVersion();
@@ -6749,6 +6772,10 @@
   }
 
   // ---------- Init ----------
+  // Stated unconditionally, before anything to do with service workers: if
+  // registration is unsupported or fails, the line must still say something
+  // rather than sit at a dash.
+  if (el.menuVersion) el.menuVersion.textContent = "Version " + APP_VERSION;
   hydrateIcons();
   initTheme();
   loadFilters();
