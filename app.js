@@ -9,7 +9,7 @@
   // network-first, so the page code is whatever the network last served, while
   // the worker is whatever last managed to install. They can disagree, and
   // when they do that is the single most useful thing the menu can say.
-  const APP_VERSION = "v89";
+  const APP_VERSION = "v90";
   const TEXT_SIZE_KEY = "dailyLog.textSize";
   const TEMPLATES_KEY = "dailyLog.templates.v1";
   const FILTERS_KEY = "dailyLog.filters";
@@ -2399,17 +2399,21 @@
           const done = isDoneOn(t, key);
           chip.className = "month-chip" + (done ? " done" : "")
             + (isOverdue(key, t, done) ? " overdue" : "");
-          // A run reads as one bar across the days it covers: square off the
-          // inner edges so consecutive cells join up, and only the first day
-          // (or the first day of a new week) carries the title.
-          let spanLabel = true;
+          // A run squares off its inner edges so its days read as one band.
+          //
+          // Every day of it carries the title. It used to be named on the first
+          // day only (and on Sundays), on the theory that repeating it was
+          // noise -- which is how calendars with no gaps between cells do it,
+          // because there the unbroken fill says "still the same thing". This
+          // grid has a 6px gap that each cell clips, so the segments cannot
+          // actually touch, and every day after the first was an unlabelled
+          // strip: a bar you could not identify without hovering it.
           if (isMultiDay(t)) {
             const first = key === t.startDate;
             const last = key === taskEndDate(t);
             chip.classList.add("span");
             if (!first) chip.classList.add("span-continues-left");
             if (!last) chip.classList.add("span-continues-right");
-            spanLabel = first || d.getDay() === 0;
             chip.title = `${t.title} — ${formatDateDisplay(t.startDate)} → ${formatDateDisplay(taskEndDate(t))}`;
           }
           if (t.tag) {
@@ -2426,7 +2430,7 @@
           }
           const label = document.createElement("span");
           label.className = "month-chip-label";
-          label.textContent = spanLabel ? t.title : "";
+          label.textContent = t.title;
           chip.appendChild(label);
           // Repeating tasks are deliberately left un-draggable: their start
           // date defines the whole series, so nudging one chip would silently
